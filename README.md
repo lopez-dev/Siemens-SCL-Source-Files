@@ -1,11 +1,11 @@
 # Siemens SCL Source Files
 
-Dieses Repository enthält eine Sammlung von Siemens SCL (Structured Control Language) Quellcodes, die direkt in Siemens SPS-Systeme importiert werden können. Die SCL-Programme sind zur Verwendung in Automatisierungsprojekten gedacht und erleichtern die schnelle Integration und Konfiguration von SPS-Programmen.
+This repository contains a collection of Siemens SCL (Structured Control Language) source codes that can be directly imported into Siemens PLC systems. The SCL programs are designed for use in automation projects, facilitating the quick integration and configuration of PLC programs.
 
-## Merkmale:
-- Fertige SCL-Quellcodes für Siemens SPS
-- Einfacher Import in TIA Portal
-- Optimiert für Automatisierungsprojekte
-- Modularer Aufbau für einfache Anpassungen
+## Features:
+- Ready-to-use SCL source codes for Siemens PLCs
+- Easy import into TIA Portal
+- Optimized for automation projects
+- Modular structure for easy customization
 
-Dieses Repository wird regelmäßig mit neuen SCL-Dateien und Updates erweitert. Contributions sind willkommen!
+This repository is regularly updated with new SCL files and updates. Contributions are welcome!
