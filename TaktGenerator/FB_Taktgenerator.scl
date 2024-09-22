@@ -1,0 +1,178 @@
+TYPE "udt_tg_takt"
+VERSION : 0.1
+STRUCT
+	Takt_10Hz : Bool;   // 10 Hz Takt Signal
+	Takt_5Hz : Bool;   // 5 Hz Takt Signal
+	Takt_2_5Hz : Bool;   // 2.5 Hz Takt Signal
+	Takt_2Hz : Bool;   // 2 Hz Takt Signal
+	Takt_1_25Hz : Bool;   // 1.25 Hz Takt Signal
+	Takt_1Hz : Bool;   // 1 Hz Takt Signal
+	Takt_0_625Hz : Bool;   // 0.625 Hz Takt Signal
+	Takt_0_5Hz : Bool;   // 0.5 Hz Takt Signal
+	Takt_0_25Hz : Bool;   // 0.25 Hz Takt Signal
+	Takt_0_2Hz : Bool;   // 0.2 Hz Takt Signal
+END_STRUCT;
+
+END_TYPE
+
+FUNCTION_BLOCK "FB_Taktgenerator"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+VAR_OUTPUT 
+	Takt_Signals : "udt_tg_takt";   // Output struct for Takt signals
+	Edge_Signals : "udt_tg_takt";   // Output struct for Edge detection signals
+END_VAR
+
+VAR 
+	Internal_TaktSignals : Array[0..9] of Bool;   // Internal Takt signal storage
+	Pulse_Trigger : Array[0..9] of Bool;   // Pulse trigger at the start of each Takt
+	Edge_Flag : Array[0..9] of Bool;   // Edge flag to detect positive edges
+	StartTime : Array[0..9] of Time;   // Start time for each Takt
+END_VAR
+
+VAR_TEMP 
+	Takt_Intervals : Array[0..9] of Time;   // Array for storing Takt intervals
+	i : Int;   // Loop index
+	ret : Int;   // Return value from system time read
+	CurrentTime_DTL {InstructionName := 'DTL'; LibVersion := '1.0'} : DTL;   // Variable for current DTL time
+	CurrentTime : Time;   // Variable for current time in TIME format
+	TimeDifference : Time;   // Variable to store the calculated time difference
+END_VAR
+
+VAR CONSTANT 
+	MAX_TIME : Time := T#24D_20H_31M_23S_647MS;   // Maximum TIME value before overflow
+	const_100MS : Time := T#100MS;   // Constant for 100ms interval
+	const_200MS : Time := T#200MS;   // Constant for 200ms interval
+	const_400MS : Time := T#400MS;   // Constant for 400ms interval
+	const_500MS : Time := T#500MS;   // Constant for 500ms interval
+	const_800MS : Time := T#800MS;   // Constant for 800ms interval
+	const_1S : Time := T#1S;   // Constant for 1 second interval
+	const_1S_600MS : Time := T#1S_600MS;   // Constant for 1.6 second interval
+	const_2S : Time := T#2S;   // Constant for 2 second interval
+	const_4S : Time := T#4S;   // Constant for 4 second interval
+	const_5S : Time := T#5S;   // Constant for 5 second interval
+END_VAR
+
+
+BEGIN
+	REGION Time_Read
+		// Read the current system time and convert it to the TIME format
+		#ret := RD_SYS_T(#CurrentTime_DTL);  // Read system time into CurrentTime_DTL
+		#CurrentTime := TOD_TO_TIME(IN := DTL_TO_TOD(IN := #CurrentTime_DTL));  // Convert DTL to TIME format
+	END_REGION
+	
+	REGION Interval_Assignment
+		// Assign the predefined Takt intervals to the appropriate array elements
+		FOR #i := 0 TO 9 DO
+			CASE #i OF
+				0:
+					#Takt_Intervals[#i] := #const_100MS;
+				1:
+					#Takt_Intervals[#i] := #const_200MS;
+				2:
+					#Takt_Intervals[#i] := #const_400MS;
+				3:
+					#Takt_Intervals[#i] := #const_500MS;
+				4:
+					#Takt_Intervals[#i] := #const_800MS;
+				5:
+					#Takt_Intervals[#i] := #const_1S;
+				6:
+					#Takt_Intervals[#i] := #const_1S_600MS;
+				7:
+					#Takt_Intervals[#i] := #const_2S;
+				8:
+					#Takt_Intervals[#i] := #const_4S;
+				9:
+					#Takt_Intervals[#i] := #const_5S;
+			END_CASE;
+		END_FOR;
+	END_REGION
+	
+	REGION Takt_Signal_Update
+		// Iterate over all frequencies and update each Takt signal based on the time difference
+		FOR #i := 0 TO 9 DO
+			// Calculate the time difference, accounting for overflow if needed
+			IF (#CurrentTime >= #StartTime[#i]) THEN
+				#TimeDifference := #CurrentTime - #StartTime[#i];
+			ELSE
+				#TimeDifference := (#MAX_TIME - #StartTime[#i]) + #CurrentTime;  // Handle time overflow
+			END_IF;
+			
+			// Toggle the Takt signal if the time difference exceeds the interval
+			IF (#TimeDifference >= #Takt_Intervals[#i]) THEN
+				#Internal_TaktSignals[#i] := NOT #Internal_TaktSignals[#i];  // Toggle the Takt signal
+				#StartTime[#i] := #CurrentTime;  // Update the start time
+			END_IF;
+		END_FOR;
+	END_REGION
+	
+	REGION Takt_Signal_Assignment
+		// Assign the internal Takt signals to the output struct fields
+		FOR #i := 0 TO 9 DO
+			CASE #i OF
+				0:
+					#Takt_Signals.Takt_10Hz := #Internal_TaktSignals[0];
+				1:
+					#Takt_Signals.Takt_5Hz := #Internal_TaktSignals[1];
+				2:
+					#Takt_Signals.Takt_2_5Hz := #Internal_TaktSignals[2];
+				3:
+					#Takt_Signals.Takt_2Hz := #Internal_TaktSignals[3];
+				4:
+					#Takt_Signals.Takt_1_25Hz := #Internal_TaktSignals[4];
+				5:
+					#Takt_Signals.Takt_1Hz := #Internal_TaktSignals[5];
+				6:
+					#Takt_Signals.Takt_0_625Hz := #Internal_TaktSignals[6];
+				7:
+					#Takt_Signals.Takt_0_5Hz := #Internal_TaktSignals[7];
+				8:
+					#Takt_Signals.Takt_0_25Hz := #Internal_TaktSignals[8];
+				9:
+					#Takt_Signals.Takt_0_2Hz := #Internal_TaktSignals[9];
+			END_CASE;
+		END_FOR;
+	END_REGION
+	
+	REGION Edge_Detection
+		// Detect edges (positive flank) for each Takt signal
+		FOR #i := 0 TO 9 DO
+			// Detect a positive edge (Takt signal changes from FALSE to TRUE)
+			#Pulse_Trigger[#i] := #Internal_TaktSignals[#i] XOR #Edge_Flag[#i];
+			
+			// Update the edge flag for the next cycle
+			#Edge_Flag[#i] := #Internal_TaktSignals[#i];
+		END_FOR;
+	END_REGION
+	
+	REGION P_Trig_Assignment
+		// Assign the Pulse Trigger signals to the appropriate output fields
+		FOR #i := 0 TO 9 DO
+			CASE #i OF
+				0:
+					#Edge_Signals.Takt_10Hz := #Pulse_Trigger[#i];
+				1:
+					#Edge_Signals.Takt_5Hz := #Pulse_Trigger[#i];
+				2:
+					#Edge_Signals.Takt_2_5Hz := #Pulse_Trigger[#i];
+				3:
+					#Edge_Signals.Takt_2Hz := #Pulse_Trigger[#i];
+				4:
+					#Edge_Signals.Takt_1_25Hz := #Pulse_Trigger[#i];
+				5:
+					#Edge_Signals.Takt_1Hz := #Pulse_Trigger[#i];
+				6:
+					#Edge_Signals.Takt_0_625Hz := #Pulse_Trigger[#i];
+				7:
+					#Edge_Signals.Takt_0_5Hz := #Pulse_Trigger[#i];
+				8:
+					#Edge_Signals.Takt_0_25Hz := #Pulse_Trigger[#i];
+				9:
+					#Edge_Signals.Takt_0_2Hz := #Pulse_Trigger[#i];
+			END_CASE;
+		END_FOR;
+	END_REGION
+	
+END_FUNCTION_BLOCK
+

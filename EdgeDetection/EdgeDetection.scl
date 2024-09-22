@@ -1,0 +1,36 @@
+FUNCTION "EdgeDetectionNeg" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.2
+   VAR_INPUT 
+      InputSignal : Bool;   // Input signal for detecting edges (used for detecting the falling edge)
+   END_VAR
+
+   VAR_IN_OUT 
+      NegEdgeOut : Bool;    // Output variable for the detected negative edge (falling edge)
+      NegEdgeMem : Bool;    // Memory flag to store the previous state of the input signal for detecting the negative edge
+   END_VAR
+
+BEGIN
+   // Detect negative edge (falling edge)
+   #NegEdgeOut := NOT #InputSignal AND #NegEdgeMem;
+   #NegEdgeMem := #InputSignal;
+END_FUNCTION
+
+
+FUNCTION "EdgeDetectionPos" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.2
+   VAR_INPUT 
+      InputSignal : Bool;   // Input signal for detecting edges (used for detecting the rising edge)
+   END_VAR
+
+   VAR_IN_OUT 
+      PosEdgeOut : Bool;    // Output variable for the detected positive edge (rising edge)
+      PosEdgeMem : Bool;    // Memory flag to store the previous state of the input signal for detecting the positive edge
+   END_VAR
+
+BEGIN
+   // Detect positive edge (rising edge)
+   #PosEdgeOut := #InputSignal AND NOT #PosEdgeMem;
+   #PosEdgeMem := #InputSignal;
+END_FUNCTION
