@@ -1,0 +1,130 @@
+TYPE "typ_TaktGenerator"
+VERSION : 0.1
+STRUCT
+	Takte : Struct
+		"10 Hz" : Bool;
+		"5 Hz" : Bool;
+		"2.5 Hz" : Bool;
+		"2 Hz" : Bool;
+		"1.25 Hz" : Bool;
+		"1 Hz" : Bool;
+		"0.625 Hz" : Bool;
+		"0.5 Hz" : Bool;
+		"0.25 Hz" : Bool;
+		"0.2 Hz" : Bool;
+	END_STRUCT;
+	P_Trig : Struct
+		"P_Trig_10 Hz" : Bool;
+		"P_Trig_5 Hz" : Bool;
+		"P_Trig_2.5 Hz" : Bool;
+		"P_Trig_2 Hz" : Bool;
+		"P_Trig_1.25 Hz" : Bool;
+		"P_Trig_1 Hz" : Bool;
+		"P_Trig_0.625 Hz" : Bool;
+		"P_Trig_0.5 Hz" : Bool;
+		"P_Trig_0.25 Hz" : Bool;
+		"P_Trig_0.2 Hz" : Bool;
+	END_STRUCT;
+	TG_Variablen : Struct
+		Aktual_Time : Time;
+		Takte { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Array[0..9] of Bool;   // Intermitentes Taktsignal (TaktIntervall True - TaktIntervall False)
+		"P-Trig" : Array[0..9] of Bool;   // kurzen Impuls (Puls-Trigger) bei jedem Taktstart
+		"N-Trig" : Array[0..9] of Bool;   // kurzen Impuls (Puls-Trigger) bei jedem Taktstart
+		Edge_Flag : Array[0..9] of Bool;
+		TaktIntervall : Array[0..9] of Time := [T#100MS, T#200MS, T#400MS, T#500MS, T#800MS, T#1S, T#1S_600MS, T#2S, T#4S, T#5S];   // Intervallzeiten
+		StartTime : Array[0..9] of Time;
+	END_STRUCT;
+END_STRUCT;
+
+END_TYPE
+
+DATA_BLOCK "DB_TaktGenerator"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+"typ_TaktGenerator"
+
+BEGIN
+
+END_DATA_BLOCK
+
+FUNCTION "FC_TG_Cyclicinterrupt_10ms" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+VAR_TEMP 
+	i : Int;
+END_VAR
+
+
+BEGIN
+	(*
+	Dieser Funktion muss in einem Zyklusinterrupt-OB aufgerufen werden.
+	Der Zyklusinterrupt-OB muss auf einen Zeittakt von 10 ms eingestellt sein.
+	*)
+	
+	// Aktuelle Zeit ermitteln
+	// 1500 CPU
+	"DB_TaktGenerator".TG_Variablen.Aktual_Time := TIME_TCK();
+	
+	// 1200 CPU
+	//"DB_TaktGenerator".Aktual_Time := T_ADD(IN1 := "DB_TaktGenerator".Aktual_Time, IN2 := T#10ms);
+	//
+	
+	FOR #i := 0 TO 9 DO
+		IF ("DB_TaktGenerator".TG_Variablen.Aktual_Time - "DB_TaktGenerator".TG_Variablen.StartTime[#i]) >= "DB_TaktGenerator".TG_Variablen.TaktIntervall[#i] THEN
+			"DB_TaktGenerator".TG_Variablen.Takte[#i] := NOT "DB_TaktGenerator".TG_Variablen.Takte[#i]; // Takt-Signal umschalten
+			"DB_TaktGenerator".TG_Variablen.StartTime[#i] := "DB_TaktGenerator".TG_Variablen.Aktual_Time; // Startzeit aktualisieren
+		END_IF;
+	END_FOR;
+	
+	"DB_TaktGenerator".Takte."10 Hz" := "DB_TaktGenerator".TG_Variablen.Takte[0];
+	"DB_TaktGenerator".Takte."5 Hz" := "DB_TaktGenerator".TG_Variablen.Takte[1];
+	"DB_TaktGenerator".Takte."2.5 Hz" := "DB_TaktGenerator".TG_Variablen.Takte[2];
+	"DB_TaktGenerator".Takte."2 Hz" := "DB_TaktGenerator".TG_Variablen.Takte[3];
+	"DB_TaktGenerator".Takte."1.25 Hz" := "DB_TaktGenerator".TG_Variablen.Takte[4];
+	"DB_TaktGenerator".Takte."1 Hz" := "DB_TaktGenerator".TG_Variablen.Takte[5];
+	"DB_TaktGenerator".Takte."0.625 Hz" := "DB_TaktGenerator".TG_Variablen.Takte[6];
+	"DB_TaktGenerator".Takte."0.5 Hz" := "DB_TaktGenerator".TG_Variablen.Takte[7];
+	"DB_TaktGenerator".Takte."0.25 Hz" := "DB_TaktGenerator".TG_Variablen.Takte[8];
+	"DB_TaktGenerator".Takte."0.2 Hz" := "DB_TaktGenerator".TG_Variablen.Takte[9];
+END_FUNCTION
+
+FUNCTION "FC_TG_OB1_Start" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+VAR_TEMP 
+	i : Int;
+END_VAR
+
+
+BEGIN
+	(*
+	Diese Funktion muss am Anfang des Haupt OB1 aufgerufen werden, damit dieser P-Trigger nur einen Zyklus lang aktiv ist.
+	*)
+	
+	FOR #i := 0 TO 9 DO
+		// Bildung der positiven Flanke für jedes Taktsignal
+		// "P-Trig" wird auf TRUE gesetzt, wenn "Takte" von FALSE auf TRUE wechselt und "Edge_Flag" noch FALSE ist
+		"DB_TaktGenerator".TG_Variablen."P-Trig"[#i] := "DB_TaktGenerator".TG_Variablen.Takte[#i] AND NOT "DB_TaktGenerator".TG_Variablen.Edge_Flag[#i] OR 
+		NOT "DB_TaktGenerator".TG_Variablen.Takte[#i] AND "DB_TaktGenerator".TG_Variablen.Edge_Flag[#i];
+		
+		// Aktualisieren des Edge-Flags für die nächste Zyklusprüfung
+		// "Edge_Flag" wird auf den aktuellen Zustand von "Takte" gesetzt, um im nächsten Zyklus die positive Flanke zu erkennen
+		"DB_TaktGenerator".TG_Variablen.Edge_Flag[#i] := "DB_TaktGenerator".TG_Variablen.Takte[#i];
+	END_FOR;
+	
+	// Zuordnung der P-Trig-Signale zu den entsprechenden Ausgängen im Datenbaustein
+	// Diese Zuweisungen übertragen den Zustand der P-Trig-Signale in die entsprechenden Felder des Datenbausteins
+	"DB_TaktGenerator".P_Trig."P_Trig_10 Hz" := "DB_TaktGenerator".TG_Variablen."P-Trig"[0];
+	"DB_TaktGenerator".P_Trig."P_Trig_5 Hz" := "DB_TaktGenerator".TG_Variablen."P-Trig"[1];
+	"DB_TaktGenerator".P_Trig."P_Trig_2.5 Hz" := "DB_TaktGenerator".TG_Variablen."P-Trig"[2];
+	"DB_TaktGenerator".P_Trig."P_Trig_2 Hz" := "DB_TaktGenerator".TG_Variablen."P-Trig"[3];
+	"DB_TaktGenerator".P_Trig."P_Trig_1.25 Hz" := "DB_TaktGenerator".TG_Variablen."P-Trig"[4];
+	"DB_TaktGenerator".P_Trig."P_Trig_1 Hz" := "DB_TaktGenerator".TG_Variablen."P-Trig"[5];
+	"DB_TaktGenerator".P_Trig."P_Trig_0.625 Hz" := "DB_TaktGenerator".TG_Variablen."P-Trig"[6];
+	"DB_TaktGenerator".P_Trig."P_Trig_0.5 Hz" := "DB_TaktGenerator".TG_Variablen."P-Trig"[7];
+	"DB_TaktGenerator".P_Trig."P_Trig_0.25 Hz" := "DB_TaktGenerator".TG_Variablen."P-Trig"[8];
+	"DB_TaktGenerator".P_Trig."P_Trig_0.2 Hz" := "DB_TaktGenerator".TG_Variablen."P-Trig"[9];
+	
+END_FUNCTION
+

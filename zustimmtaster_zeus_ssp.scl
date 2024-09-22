@@ -1,0 +1,140 @@
+function_block Zustimmtaster_SSP
+title   = 'Zustimmtaster_SSP' // Titel des Funktionsblocks
+family  : 'Zustimm' // Familie des Funktionsblocks
+author  : 'lopez' // Autor des Funktionsblocks
+
+// Eingangsvariablen
+var_input
+    not_halt_OK : bool; // Not-Halt OK Signal
+    drei_pos_sw    : Bool; // Drei Positionen Taster (Zustimmtaster)
+    activity_sensor : Bool; // Aktivität-Sensor an Wandhalterung
+    Bit_0 : bool; // Bit 0 für BCD-Zählung
+    Bit_1 : bool; // Bit 1 für BCD-Zählung
+    Bit_2 : bool; // Bit 2 für BCD-Zählung
+    Bit_3 : bool; // Bit 3 für BCD-Zählung
+    SW_Right :bool; // Schalter Rechts
+    SW_Left :bool; // Schalter Links
+    LED_Takt :bool; // Takt für LED Blinken
+    BCD_offset :int; // BCD Offset-Wert
+end_var
+
+// Ausgangsvariablen
+var_output
+    LED_Red : bool; // Rote LED-Anzeige
+    LED_Green : bool; // Grüne LED-Anzeige
+    Out_Right : bool; // Ausgang Rechts
+    Out_Left : bool; // Ausgang Links
+    BCD_Nr : int; // BCD Nummer
+    OutputLeft : ARRAY[1..16] OF BOOL;
+    OutputRight : ARRAY[1..16] OF BOOL; 
+end_var
+
+// Interne Variablen
+var
+    Freigabe : bool; // Freigabesignal
+    Edge_flag_pos_3SW : bool; // Flankenmerker für drei Pos. Schalter
+    Edge_flag_pos_LeftSW : bool; // Flankenmerker für Linken Schalter
+    Edge_flag_pos_RightSW : bool; // Flankenmerker für Rechten Schalter
+    BCD_is_diff : bool; // Marker für BCD-Änderung
+	BCD_Nr_cache : int; // Alte BCD_Nr
+    Bit_Wert_0 : int; // Wert von Bit 0
+    Bit_Wert_1 : int; // Wert von Bit 1
+    Bit_Wert_2 : int; // Wert von Bit 2
+    Bit_Wert_3 : int; // Wert von Bit 3
+    Constant_bit0 :int := 1; // Konstante für Bit 0
+    Constant_bit1 :int := 2; // Konstante für Bit 1
+    Constant_bit2 :int := 4; // Konstante für Bit 2
+    Constant_bit3 :int := 8; // Konstante für Bit 3
+    i :int; //index für die FOR Schleife
+end_var
+
+// Temporäre Variablen
+var_temp
+    BCD_Result :int; // BCD Ergebnis
+    Pulse_GrundStellung :bool; // Puls für Grundstellung
+    Pulse_Left :bool; // Puls für Linken Schalter
+    Pulse_Right :bool; // Puls für Rechten Schalter
+end_var
+
+begin
+// Direkte Steuerung der LED-Anzeigen
+LED_Red := not not_halt_OK;
+LED_Green := ((activity_sensor AND NOT drei_pos_sw AND LED_Takt) OR (activity_sensor AND drei_pos_sw AND Freigabe)) AND not_halt_OK;
+
+
+// Bit-Werte Berechnung basierend auf Bit-Eingängen
+Bit_Wert_0 := 0;
+IF Bit_0 THEN Bit_Wert_0 := Constant_bit0; END_IF;
+
+Bit_Wert_1 := 0;
+IF Bit_1 THEN Bit_Wert_1 := Constant_bit1; END_IF;
+
+Bit_Wert_2 := 0;
+IF Bit_2 THEN Bit_Wert_2 := Constant_bit2; END_IF;
+
+Bit_Wert_3 := 0;
+IF Bit_3 THEN Bit_Wert_3 := Constant_bit3; END_IF;
+
+
+// Summierung der Bit-Werte zur BCD-Berechnung
+BCD_Result := Bit_Wert_0 + Bit_Wert_1 + Bit_Wert_2 + Bit_Wert_3 + BCD_offset;
+
+// Prüfung auf Änderung der BCD-Nummer
+BCD_is_diff := (BCD_Result <> BCD_Nr_cache);
+IF BCD_is_diff THEN
+    BCD_Nr := BCD_Result;
+    BCD_Nr_cache := BCD_Result;
+ELSIF NOT Freigabe THEN
+    BCD_is_diff := FALSE;
+END_IF;
+
+
+
+// Zurücksetzen der Freigabe bei BCD-Änderung oder Zustimmtaster-Release
+Freigabe := NOT (BCD_is_diff OR NOT drei_pos_sw OR NOT not_halt_OK) AND Freigabe;
+
+
+// Aktivierung der Freigabe bei positiver Flanke des Zustimmtasters
+Pulse_GrundStellung := drei_pos_sw AND NOT  Edge_flag_pos_3SW;
+Edge_flag_pos_3SW := drei_pos_sw;
+
+Freigabe := Freigabe OR (NOT Freigabe AND NOT Out_Left AND NOT Out_Right AND activity_sensor AND Pulse_GrundStellung AND not_halt_OK);
+
+
+// Steuerung des Ausgangs Links
+Pulse_Left := SW_Left AND NOT Edge_flag_pos_LeftSW;
+Edge_flag_pos_LeftSW := SW_Left;
+
+// Out_Left aktiv setzen, wenn Pulse_Left aktiv ist und keine Blockierung vorliegt (SW_Right ist nicht aktiv).
+// Out_Left bleibt aktiv, bis SW_Left deaktiviert wird oder die Freigabe zurückgenommen wird.
+IF Pulse_Left AND Freigabe AND not_halt_OK AND NOT SW_Right THEN
+    Out_Left := TRUE;
+ELSIF NOT SW_Left OR NOT Freigabe THEN
+    Out_Left := FALSE;
+END_IF;
+
+
+// Steuerung des Ausgangs Rechts
+Pulse_Right := SW_Right AND NOT Edge_flag_pos_RightSW;
+Edge_flag_pos_RightSW := SW_Right;
+
+if  Freigabe
+    AND not_halt_OK
+    AND Pulse_Right
+    AND NOT SW_Left
+then
+      Out_Right := TRUE; // Rechten Ausgang aktivieren
+elsif NOT SW_Right OR NOT Freigabe
+then
+      Out_Right := FALSE; // Rechten Ausgang deaktivieren
+end_if;
+
+
+// Steuerung der Einzelausgänge
+FOR i := 1 TO 15 DO
+    OutputLeft[i] := BCD_Result = i AND Out_Left;
+    OutputRight[i] := BCD_Result = i AND Out_Right;
+END_FOR;
+
+
+end_function_block

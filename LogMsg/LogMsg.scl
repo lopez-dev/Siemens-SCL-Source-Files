@@ -1,0 +1,1161 @@
+TYPE "typ_DataLogging_DB"
+VERSION : 0.1
+   STRUCT
+      LogEntryIndex : UInt;   // Aktuelle Log-Eintrag-Position
+      "name" : String := '';   // Name des Log-Eintrags
+      nextPosInStack : UInt := 1;   // Nächster Log Datei Nr.
+      newName : String := 'DataLog_';   // Name für neue Log-Dateien
+      logID : DWord;   // ID des Log-Eintrags
+      TurnAllOn : Bool;   // Setze alle Logging Tags auf TRUE
+      TurnAlloff : Bool;   // Setze alle Logging Tags auf FALSE
+      reset : Bool;   // Reset Befehl um LogFehler zu quittieren und Fehler Zähler zurücksetzen
+      deleteAll : Bool;   // Löscht alle LogEntrys
+      dataLogEntries : Array[0..7] of Struct   // Array von Log-Einträgen
+         "name" : String;   // Name des Log-Eintrags
+         ID : DWord;   // ID des Log-Eintrags
+         DLclosed : Bool;   // Gibt an, ob der Log-Eintrag geschlossen ist
+      END_STRUCT;
+      DLcreate : Struct   // Struktur für die Erstellung eines Log-Eintrags
+         execute : Bool;   // Ausführen
+         done : Bool;   // Abgeschlossen
+         busy : Bool;   // Aktuell läuft
+         error : Bool;   // Fehler
+         status : Word;   // Aktueller Status
+         memStatusMsg : String[200];   // Status Meldung in Textform
+         memStatus : Word;   // Zuletzt gespeicherter Statusmeldung
+         dlogCreated : Bool;   // Log-Eintrag erfolgreich erstellt
+      END_STRUCT;
+      DLdelete : Struct   // Struktur für das Löschen eines Log-Eintrags
+         execute : Bool;   // Ausführen
+         deleteMode : Bool := TRUE;   // Löschmodus aktiv
+         done : Bool;   // Abgeschlossen
+         busy : Bool;   // Aktuell läuft
+         error : Bool;   // Fehler
+         status : Word;   // Aktueller Status
+         memStatusMsg : String[200];   // Status Meldung in Textform
+         memStatus : Word;   // Zuletzt gespeicherter Statusmeldung
+         dlogDeleted : Bool;   // Log-Eintrag erfolgreich gelöscht
+      END_STRUCT;
+      DLwrite : Struct   // Struktur für das Schreiben eines Log-Eintrags
+         execute : Bool;   // Ausführen
+         Preset : Struct   // Vorgabestruktur für den Log-Eintrag
+            ID : UInt;   // Id des Datensatz
+            Tag : String[10];   // Tag des Datensatz
+            Text : String[100];   // Meldetext
+         END_STRUCT;
+         done : Bool;   // Abgeschlossen
+         busy : Bool;   // Aktuell läuft
+         error : Bool;   // Fehler
+         status : Word;   // Aktueller Status
+         memStatusMsg : String[200];   // Status Meldung in Textform
+         memStatus : Word;   // Zuletzt gespeicherter Statusmeldung
+         memDone : Bool;   // Log-Eintrag erfolgreich geschrieben
+      END_STRUCT;
+      DLnewfile : Struct   // Struktur für das Erstellen einer neuen Log-Datei
+         execute : Bool;   // Ausführen
+         done : Bool;   // Abgeschlossen
+         busy : Bool;   // Aktuell läuft
+         error : Bool;   // Fehler
+         status : Word;   // Aktueller Status
+         memStatusMsg : String[200];   // Status Meldung in Textform
+         memStatus : Word;   // Zuletzt gespeicherter Statusmeldung
+         newFileCreated : Bool;   // Log-Eintrag erfolgreich erstellt
+      END_STRUCT;
+      DLclose : Struct   // Struktur für das Schließen einer Log-Datei
+         execute : Bool;   // Ausführen
+         done : Bool;   // Abgeschlossen
+         busy : Bool;   // Aktuell läuft
+         error : Bool;   // Fehler
+         status : Word;   // Aktueller Status
+         memStatusMsg : String[200];   // Status Meldung in Textform
+         memStatus : Word;   // Zuletzt gespeicherter Statusmeldung
+         memDone : Bool;   // Log-Eintrag erfolgreich geschlossen
+      END_STRUCT;
+      DLopen : Struct   // Struktur für das Öffnen einer Log-Datei
+         execute : Bool;   // Ausführen
+         done : Bool;   // Abgeschlossen
+         busy : Bool;   // Aktuell läuft
+         error : Bool;   // Fehler
+         status : Word;   // Aktueller Status
+         memStatusMsg : String[200];   // Status Meldung in Textform
+         memStatus : Word;   // Zuletzt gespeicherter Statusmeldung
+         memDone : Bool;   // Log-Eintrag erfolgreich geöffnet
+      END_STRUCT;
+      Parameter : Struct
+         LoggingTag : Array[0..7] of Struct   // Array von Logging-Parametern
+            On { S7_SetPoint := 'True'} : Bool;   // Gibt an, ob das Logging aktiviert ist
+            Tag { S7_SetPoint := 'True'} : String[10] := 'tag0';   // Tag des Log-Eintrags
+         END_STRUCT;
+         Auto_F_Stopp : Bool := TRUE;   // Automatisch Stoppen von Loggen beim erreichen der Maximale anzahl von Fehler
+         Auto_open : Bool;   // Öffnet Automatiswch die Datei beim Schreiben
+         Auto_NewFile : Bool;   // Generiert ein neuen DataLog automatisch oder wechselt zum nächten
+         Max_F : Int := 3;   // Maximale Anzahl von Fehler bevor das Stoppen von Loggen.
+         BufferSize { S7_SetPoint := 'True'} : Int := 24;   // Größe des Puffers für das Logging (Grösse des Array nicht überschreiten)
+         MaxLoggingTags : Int := 8;   // Größe des LoggingTagArray  (Grösse des Array nicht überschreiten)
+         maxPosEntry { S7_SetPoint := 'True'} : UInt := 8;   // Maximale Anzahl an dataLogEntries (Grösse des Array nicht überschreiten)
+         newRECORDS { S7_SetPoint := 'True'} : UInt := 2000;   // Maximale Anzahl von Datensätze für neue LogDateien
+         logHeader { S7_SetPoint := 'True'} : String := 'ID,Tag,Text';   // Spalten Namen
+         "counter" { S7_SetPoint := 'True'} : UInt;   // Zählt die geloggte Einträge
+         NextID { S7_SetPoint := 'True'} : UInt := 1;   // Nächste Id Nr.
+         NeNamePrefix { S7_SetPoint := 'True'} : String[10] := 'LogData_';   // Datei Name Prefix
+      END_STRUCT;
+      Buffer : Array[0..23] of Struct   // Meldepuffer. Speichert die zu loggende Meldetexte
+         id : UInt;   // ID des Meldetext
+         tag : String[10];   // Tag des Meldetext
+         Text : String[100];   // Meldetext
+         unwritten : Bool;   // Gibt an ob dieser Eintrag noch nicht geschrieben bzw. geloggt wurde. 
+      END_STRUCT;
+      Statistik : Struct   // Algemeine Statistik Variablen
+         MaxBufferRecorded : Int;   // Höchste erreichste Pufferplatz
+         F_Counter : Int;   // Fehler Zähler
+      END_STRUCT;
+      myData : Struct   // Aktueller zu bearbeitende Log Datensatz
+         ID : UInt;   // Id des Datensatz
+         Tag : String[10];   // Tag des Datensatz
+         Text : String[100];   // Meldetext
+      END_STRUCT;
+   END_STRUCT;
+
+END_TYPE
+
+DATA_BLOCK "DB_LogMsg"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+"typ_DataLogging_DB"
+
+BEGIN
+   Parameter.LoggingTag[0].On := TRUE;
+   Parameter.LoggingTag[0].Tag := 'System';
+   Parameter.LoggingTag[1].On := TRUE;
+   Parameter.LoggingTag[1].Tag := 'Infeed';
+   Parameter.LoggingTag[2].On := TRUE;
+   Parameter.LoggingTag[2].Tag := 'Outfeed';
+   Parameter.LoggingTag[3].On := TRUE;
+   Parameter.LoggingTag[3].Tag := 'Loader';
+   Parameter.LoggingTag[4].On := TRUE;
+   Parameter.LoggingTag[4].Tag := 'Unloader';
+   Parameter.LoggingTag[5].On := TRUE;
+   Parameter.LoggingTag[5].Tag := 'Deck';
+   Parameter.LoggingTag[6].On := TRUE;
+   Parameter.maxPosEntry := 8;
+   Parameter.newRECORDS := 2000;
+   Parameter.NeNamePrefix := 'DataLog_';
+
+END_DATA_BLOCK
+
+FUNCTION "fc_LogMsg_InputBuffer" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      Logging_i : Int;
+      Text : String;
+   END_VAR
+
+   VAR_TEMP 
+      i : Int;
+   END_VAR
+
+
+BEGIN
+	IF #Logging_i <= "DB_LogMsg".Parameter.MaxLoggingTags -1 THEN
+	    IF "DB_LogMsg".Parameter.LoggingTag[#Logging_i].On THEN // AND DB.LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].DLclosed THEN
+	        // Schleife rückwärts durchlaufen, um die Meldungen zu verschieben
+	        FOR #i := "DB_LogMsg".Parameter.BufferSize - 1 TO 1 BY -1 DO
+	            "DB_LogMsg".Buffer[#i].id := "DB_LogMsg".Buffer[#i - 1].id;
+	            "DB_LogMsg".Buffer[#i].tag := "DB_LogMsg".Buffer[#i - 1].tag;
+	            "DB_LogMsg".Buffer[#i].Text := "DB_LogMsg".Buffer[#i - 1].Text;
+	            "DB_LogMsg".Buffer[#i].unwritten := "DB_LogMsg".Buffer[#i - 1].unwritten;
+	        END_FOR;
+	        
+	        // Neue Meldung an erster Stelle einfügen
+	        "DB_LogMsg".Buffer[0].id := "DB_LogMsg".Parameter.NextID;
+	        "DB_LogMsg".Parameter.NextID := "DB_LogMsg".Parameter.NextID + 1;
+	        "DB_LogMsg".Buffer[0].Text := #Text; // Zugriff auf den spezifischen Meldetext
+	        "DB_LogMsg".Buffer[0].tag := "DB_LogMsg".Parameter.LoggingTag[#Logging_i].Tag; // Zugriff auf den spezifischen Meldetext
+	        "DB_LogMsg".Buffer[0].unwritten := TRUE;
+	    END_IF;
+	    
+	ELSIF #Logging_i = 100 THEN  // Log Fehler
+	    // Schleife rückwärts durchlaufen, um die Meldungen zu verschieben
+	    FOR #i := "DB_LogMsg".Parameter.BufferSize - 1 TO 1 BY -1 DO
+	        "DB_LogMsg".Buffer[#i].id := "DB_LogMsg".Buffer[#i - 1].id;
+	        "DB_LogMsg".Buffer[#i].tag := "DB_LogMsg".Buffer[#i - 1].tag;
+	        "DB_LogMsg".Buffer[#i].Text := "DB_LogMsg".Buffer[#i - 1].Text;
+	        "DB_LogMsg".Buffer[#i].unwritten := "DB_LogMsg".Buffer[#i - 1].unwritten;
+	    END_FOR;
+	    // Neue Meldung an erster Stelle einfügen
+	    "DB_LogMsg".Buffer[0].id := "DB_LogMsg".Parameter.NextID;
+	    "DB_LogMsg".Parameter.NextID := "DB_LogMsg".Parameter.NextID + 1;
+	    "DB_LogMsg".Buffer[0].Text := #Text; // Zugriff auf den spezifischen Meldetext
+	    "DB_LogMsg".Buffer[0].tag := 'LogFehler';
+	    "DB_LogMsg".Buffer[0].unwritten := TRUE;
+	ELSE
+	    ;
+	END_IF;
+	
+END_FUNCTION
+
+FUNCTION "fc_LogMsg_CallEntry" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_TEMP 
+      tempEntry : UInt;
+   END_VAR
+
+
+BEGIN
+	
+	// +++ Funktion: Ruft den Namen und die ID des Datenprotokolleintrags entsprechend des ausgewählten Eintrags ab.
+	
+	//IF "DataLogging_DB".#LogEntryIndex <= "DataLogging_DB".Parameter.maxPosEntry THEN
+	"DB_LogMsg".name := "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].name;
+	"DB_LogMsg".logID := "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].ID;
+	//END_IF;
+	
+	
+	
+END_FUNCTION
+
+FUNCTION "fc_LogMsg_NextEntry" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_TEMP 
+      nextIndex : UInt;
+   END_VAR
+
+
+BEGIN
+	// Aktualisiere den LogEntryIndex und nextPosInStack, so dass nextPosInStack immer einen Schritt vor dem LogEntryIndex ist
+	
+	// Berechne den nächsten Index basierend auf der aktuellen Position
+	#nextIndex := "DB_LogMsg".LogEntryIndex + 1;
+	
+	// Wenn der nächste Index die maximale Position überschreitet, setze ihn auf 0
+	IF #nextIndex > ("DB_LogMsg".Parameter.maxPosEntry - 1) THEN
+	    #nextIndex := 0;
+	END_IF;
+	
+	// Aktualisiere LogEntryIndex
+	"DB_LogMsg".LogEntryIndex := #nextIndex;
+	
+	// Berechne nextPosInStack, der immer einen Schritt nach LogEntryIndex sein soll
+	"DB_LogMsg".nextPosInStack := "DB_LogMsg".LogEntryIndex + 1;
+	
+	// Wenn nextPosInStack die maximale Position überschreitet, setze es auf 0
+	IF "DB_LogMsg".nextPosInStack > ("DB_LogMsg".Parameter.maxPosEntry -1) THEN
+	    "DB_LogMsg".nextPosInStack := 0;
+	END_IF;
+END_FUNCTION
+
+FUNCTION_BLOCK "FB_LogMsg"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR 
+      DataLogCreate_Instance {InstructionName := 'DataLogCreate'; LibVersion := '1.0'} : DataLogCreate;
+      DataLogCloseBeforeCreate_Instance2 {InstructionName := 'DataLogClose'; LibVersion := '1.0'} : DataLogClose;
+      DataLogWrite_Instance {InstructionName := 'DataLogWrite'; LibVersion := '1.0'; S7_SetPoint := 'False'} : DataLogWrite;
+      DataLogClose_Instance {InstructionName := 'DataLogClose'; LibVersion := '1.0'} : DataLogClose;
+      DataLogOpen_Instance {InstructionName := 'DataLogOpen'; LibVersion := '1.1'} : DataLogOpen;
+      DataLogNewFile_Instance {InstructionName := 'DataLogNewFile'; LibVersion := '1.1'} : DataLogNewFile;
+      DataLogDelete_Instance {InstructionName := 'DataLogDelete'; LibVersion := '1.1'} : DataLogDelete;
+      LoggingFlag { S7_SetPoint := 'True'} : Bool;
+      Error_flag : Bool;
+      LoggingOn : Bool;
+      Deleted : Array[0..7] of Bool;
+      DeleteState : UInt;
+      i2 { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Int;
+   END_VAR
+
+   VAR_TEMP 
+      i : Int;
+      AllTagOff : Bool;
+      LEnr : Array[0..7] of DWord;
+   END_VAR
+
+   VAR CONSTANT 
+      EMPTYSTRING : String;
+      LENr0 : DWord := 16#7200_1000;
+      LENr1 : DWord := 16#7200_1002;
+      LENr2 : DWord := 16#7200_1004;
+      LENr3 : DWord := 16#7200_1006;
+      LENr4 : DWord := 16#7200_1008;
+      LENr5 : DWord := 16#7200_100A;
+      LENr6 : DWord := 16#7200_100C;
+      LENr7 : DWord := 16#7200_100E;
+   END_VAR
+
+
+BEGIN
+	REGION Info
+	    // ************************************************************************************************************
+	    //
+	    // Über das LogMsg:
+	    // - Erstellung, Schreiben, Schließen, Öffnen, Erstellen und Löschen von Datenprotokollen.
+	    // - Um sicherzustellen, dass Name und ID des Datenprotokolls nicht verloren gehen, werden diese Werte (zusammen mit dem Status 'geschlossen') als Eintrag in einem Datenprotokollspeicher ("dataLogEntries") gespeichert.
+	    // - Der Speicher ("dataLogEntries") kann bis zu acht Datenprotokolleinträge speichern.
+	    //   (Wenn Sie die Größe ändern möchten, müssen Sie das maximale Limit des Arrays sowie den Wert von "maxPosInStack" anpassen.)
+	    // - Zur Verwaltung eines erstellten Datenprotokolls muss der entsprechende Datenprotokolleintrag ausgewählt werden. Ändern Sie den Wert von "Parameter.callEntry", um den aufzurufenden Eintrag auszuwählen.
+	    //
+	    // Wichtige Hinweise:
+	    // - Stellen Sie sicher, dass zuerst der aufzurufende Datenprotokolleintrag ausgewählt wird, bevor eine Datenprotokollanweisung ausgeführt wird.
+	    // - Warten Sie immer, bis die vollständige Ausführung (DONE) einer Datenprotokollanweisung abgeschlossen ist, bevor Sie eine weitere ausführen.
+	    //
+	    // Voraussetzungen:
+	    // Nehmen Sie die folgenden Einstellungen in den CPU-Eigenschaften vor:
+	    // - Aktivieren Sie den Zugriff auf den Webserver unter "... > PROFINET-Schnittstelle > Zugriff auf den Webserver".
+	    // - Aktivieren Sie in den "CPU-Eigenschaften > Webserver" den Webserver für das Modul.
+	    // - Erstellen Sie im Abschnitt „Benutzerverwaltung“ einen neuen Benutzer mit allen Lese-, Schreib- und Löschrechten (Admin-Rechten).
+	    //
+	    // ************************************************************************************************************
+	END_REGION
+	REGION Reset Status
+	    // Resetet alle Gespeicherte Status Meldungen beim eintritt eines neues Befehl
+	    IF "DB_LogMsg".DLcreate.execute OR "DB_LogMsg".DLdelete.execute (* OR "DB_LogMsg".DLwrite.execute *) OR "DB_LogMsg".DLnewfile.execute OR "DB_LogMsg".DLclose.execute OR "DB_LogMsg".DLopen.execute OR "DB_LogMsg".deleteAll THEN
+	        "DB_LogMsg".DLcreate.memStatus := 0;
+	        "DB_LogMsg".DLdelete.memStatus := 0;
+	        "DB_LogMsg".DLwrite.memStatus := 0;
+	        "DB_LogMsg".DLnewfile.memStatus := 0;
+	        "DB_LogMsg".DLclose.memStatus := 0;
+	        "DB_LogMsg".DLopen.memStatus := 0;
+	    END_IF;
+	    
+	END_REGION
+	
+	REGION nextPosInStack Check
+	    // Berechne nextPosInStack, der immer einen Schritt nach LogEntryIndex sein soll
+	    "DB_LogMsg".nextPosInStack := "DB_LogMsg".LogEntryIndex + 1;
+	    
+	    // Wenn nextPosInStack die maximale Position überschreitet, setze es auf 0
+	    IF "DB_LogMsg".nextPosInStack > ("DB_LogMsg".Parameter.maxPosEntry -1) THEN
+	        "DB_LogMsg".nextPosInStack := 0;
+	    END_IF;
+	    "DB_LogMsg".logID := "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].ID;
+	END_REGION
+	
+	REGION Name generator
+	    // Generiert Namen für neue Datenprotokolle basierend auf einem vordefinierten Präfix und der aktuellen Position im Stack.
+	    
+	    // newName = Prefix_ + nextPosInStack
+	    "DB_LogMsg".newName := "DB_LogMsg".Parameter.NeNamePrefix;  // Setzt das Präfix für den neuen Namen
+	    VAL_STRG(IN := "DB_LogMsg".nextPosInStack,                 // Nimmt die nächste Position im Stack als Eingabewert
+	             SIZE := 1,                                        // Größe des konvertierten Strings auf 1 Zeichen begrenzen
+	             PREC := 0,                                        // Keine Nachkommastellen verwenden
+	             FORMAT := 16#0000,                                // Formatierung für die Stringkonvertierung
+	             P := INT_TO_UINT(IN := LEN("DB_LogMsg".Parameter.NeNamePrefix)) + 1, // Position direkt nach dem Präfix
+	             OUT => "DB_LogMsg".newName);                      // Speichert das Ergebnis in 'newName'
+	    
+	    // name = Prefix_ + LogEntryIndex
+	    "DB_LogMsg".name := "DB_LogMsg".Parameter.NeNamePrefix;   // Setzt das Präfix für den Namen
+	    VAL_STRG(IN := "DB_LogMsg".LogEntryIndex,                // Nimmt den Log-Eintrag-Index als Eingabewert
+	             SIZE := 1,                                      // Größe des konvertierten Strings auf 1 Zeichen begrenzen
+	             PREC := 0,                                      // Keine Nachkommastellen verwenden
+	             FORMAT := 16#0000,                              // Formatierung für die Stringkonvertierung
+	             P := INT_TO_UINT(IN := LEN("DB_LogMsg".Parameter.NeNamePrefix)) + 1, // Position direkt nach dem Präfix
+	             OUT => "DB_LogMsg".name);                       // Speichert das Ergebnis in 'name'
+	END_REGION
+	
+	
+	
+	REGION Buffer Manager
+	    // Puffer-Manager zur Verwaltung von Datenprotokoll-Schreibeinträgen
+	    #LoggingOn := FALSE;
+	    FOR #i := 0 TO 7 DO
+	        IF "DB_LogMsg".Parameter.LoggingTag[#i].On THEN
+	            #LoggingOn := TRUE;
+	        END_IF;
+	    END_FOR;
+	    
+	    REGION Buffer Error
+	        // Überprüft, ob der letzte Puffer-Eintrag noch nicht bearbeitet wurde (pass = FALSE)
+	        IF "DB_LogMsg".Buffer["DB_LogMsg".Parameter.BufferSize - 1].unwritten AND NOT #Error_flag THEN
+	            #i := 0;  // Initialisiert den Schleifenzähler
+	            
+	            
+	            "DB_LogMsg".DLnewfile.execute := TRUE;
+	            
+	            
+	            // Ruft die Funktion zur Eingabe in den Puffer auf und gibt eine Fehlermeldung aus
+	            "fc_LogMsg_InputBuffer"(Logging_i := 100,  // Setzt den Index auf 100, möglicherweise zur Identifizierung der Meldung
+	                                    Text := 'Puffer voll: Steuerung kann Datenprotokolle nicht schnell genug abarbeiten.');
+	            // Text der Fehlermeldung, die auf Pufferüberlauf hinweist
+	            #Error_flag := TRUE;
+	            "DB_LogMsg".Statistik.F_Counter := "DB_LogMsg".Statistik.F_Counter + 1;
+	        END_IF;
+	        
+	        REGION Auto_F_Stopp
+	            IF "DB_LogMsg".Parameter.Auto_F_Stopp AND "DB_LogMsg".Statistik.F_Counter >= "DB_LogMsg".Parameter.Max_F THEN
+	                // Schaltet das Loggen aus wenn die maximale anzahl von Fehler erreicht wurde
+	                FOR #i := 0 TO "DB_LogMsg".Parameter.MaxLoggingTags - 1 DO
+	                    "DB_LogMsg".Parameter.LoggingTag[#i].On := FALSE;  // Deaktiviert das Logging für jeden Eintrag im Array
+	                END_FOR;
+	                "DB_LogMsg".DLclose.execute := TRUE;
+	            END_IF;
+	        END_REGION
+	
+	        
+	        IF "DB_LogMsg".DLwrite.done THEN
+	            #Error_flag := FALSE;
+	        END_IF;
+	        
+	    END_REGION
+	    
+	    REGION Logging Buffer -> DLwrite.preset
+	        #LoggingFlag := FALSE;  // Setzt die Logging-Flag zurück, um zukünftige Schreibvorgänge zu ermöglichen
+	        // Überprüft, ob keine Schreiboperationen im Gange sind, kein Logging aktiv ist und keine Fehler vorliegen
+	        IF NOT "DB_LogMsg".DLwrite.busy AND NOT #LoggingFlag AND NOT "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].DLclosed THEN
+	            #i := 0;  // Initialisiert den Schleifenzähler
+	            // Durchläuft den Puffer von der letzten zur ersten Position
+	            FOR #i := "DB_LogMsg".Parameter.BufferSize - 1 TO 0 BY -1 DO
+	                // Überprüft, ob noch kein Logging aktiv ist und der aktuelle Puffer-Eintrag bereit ist (pass = FALSE) und Text enthält
+	                IF NOT #LoggingFlag AND "DB_LogMsg".Buffer[#i].unwritten = TRUE AND ("DB_LogMsg".Buffer[#i].Text <> '') THEN
+	                    "DB_LogMsg".Buffer[#i].unwritten := FALSE;   // Markiert den Puffer-Eintrag als bearbeitet
+	                    #LoggingFlag := TRUE;                      // Setzt die Logging-Flag, um doppeltes Logging zu verhindern
+	                    "DB_LogMsg".DLwrite.Preset.Text := "DB_LogMsg".Buffer[#i].Text; // Übernimmt den Text aus dem Puffer in das Schreibpreset
+	                    "DB_LogMsg".DLwrite.Preset.Tag := "DB_LogMsg".Buffer[#i].tag;   // Übernimmt das Tag aus dem Puffer in das Schreibpreset
+	                    "DB_LogMsg".DLwrite.Preset.ID := "DB_LogMsg".Buffer[#i].id;     // Übernimmt die ID aus dem Puffer in das Schreibpreset
+	                    "DB_LogMsg".DLwrite.execute := TRUE;   // Startet den Schreibvorgang
+	                END_IF;
+	            END_FOR;
+	        END_IF;
+	        
+	        // Überprüft, ob die NextID das Maximum erreicht hat und setzt sie ggf. zurück
+	        IF "DB_LogMsg".Parameter.NextID = 32767 THEN
+	            "DB_LogMsg".Parameter.NextID := 0;  // Setzt die NextID auf 0 zurück, um Überlauf zu vermeiden
+	        END_IF;
+	    END_REGION
+	END_REGION
+	
+	REGION MaxBufferRecorded
+	    FOR #i := 0 TO "DB_LogMsg".Parameter.BufferSize - 1 DO
+	        IF "DB_LogMsg".Buffer[#i].unwritten AND #i > "DB_LogMsg".Statistik.MaxBufferRecorded THEN
+	            "DB_LogMsg".Statistik.MaxBufferRecorded := #i;
+	        END_IF;
+	    END_FOR;
+	END_REGION
+	
+	REGION DataLogCreate
+	    // Überprüft den Status der letzten Schreiboperation
+	    IF "DB_LogMsg".DLwrite.status = 16#0001 THEN // 'Letzter moeglicher Datensatz am Ende der Datei erstellt. Beim Erstellen eines weiteren Datensatzes wird ein aelterer ueberschrieben.'
+	        "DB_LogMsg".DLcreate.execute := TRUE;
+	    END_IF;
+	    IF "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].name = '' THEN
+	        "DB_LogMsg".DLcreate.dlogCreated := FALSE;
+	    END_IF;
+	    IF "DB_LogMsg".DLwrite.execute AND NOT "DB_LogMsg".DLcreate.dlogCreated THEN
+	        "DB_LogMsg".DLcreate.execute := TRUE;
+	    END_IF;
+	    
+	        // Verwaltung der Erstellung von Datenprotokollen
+	        // "DLcreate.execute" auf "TRUE" setzen, um ein Datenprotokoll zu erstellen.
+	        #DataLogCreate_Instance(REQ := "DB_LogMsg".DLcreate.execute,
+	                                RECORDS := "DB_LogMsg".Parameter.newRECORDS,
+	                                FORMAT := 1,
+	                                TIMESTAMP := 4,
+	                                NAME := "DB_LogMsg".name,
+	                                DONE => "DB_LogMsg".DLcreate.done,
+	                                BUSY => "DB_LogMsg".DLcreate.busy,
+	                                ERROR => "DB_LogMsg".DLcreate.error,
+	                                STATUS => "DB_LogMsg".DLcreate.status,
+	                                ID := "DB_LogMsg".logID,
+	                                HEADER := "DB_LogMsg".Parameter.logHeader,
+	                                DATA := "DB_LogMsg".myData);
+	        
+	        IF "DB_LogMsg".DLcreate.execute THEN
+	            "DB_LogMsg".DLcreate.execute := FALSE;
+	        END_IF;
+	        
+	        // Bei Fehlern: Speichern des Status
+	        IF "DB_LogMsg".DLcreate.error OR "DB_LogMsg".DLcreate.done THEN
+	            "DB_LogMsg".DLcreate.memStatus := "DB_LogMsg".DLcreate.status;
+	        END_IF;
+	        
+	        IF "DB_LogMsg".DLcreate.done THEN
+	            "DB_LogMsg".Parameter.NextID := 0;
+	        END_IF;
+	        
+	        // Speichern von Name und ID des erstellten Datenprotokolls
+	        IF "DB_LogMsg".DLcreate.done OR
+	            "DB_LogMsg".DLcreate.memStatus = 16#8093 THEN // 'Data Log existiert bereits.'
+	            "DB_LogMsg".DLcreate.dlogCreated := TRUE;
+	            // Speichert den Namen und die ID des neuen Datenprotokolls in der Datenbank "dataLogEntries".
+	            "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].name := "DB_LogMsg".name;
+	            "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].ID := "DB_LogMsg".logID;
+	        END_IF;
+	        REGION StatusDataLogCreate
+	            CASE "DB_LogMsg".DLcreate.memStatus OF
+	                0:
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Keine Fehler.';
+	                7000:
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Keine Auftragsbearbeitung aktiv.';
+	                7001:
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Beginn der Auftragsbearbeitung. Parameter BUSY = 1, DONE = 0.';
+	                7002:
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Zwischenaufruf (REQ irrelevant): Anweisung bereits aktiv; BUSY hat den Wert "1".';
+	                32880: // W#16#8070 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Die maximale Anzahl gleichzeitig aktiver DataLogCreate-Anweisungen wurde bereits erreicht.';
+	                32912: // W#16#8090 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Unzulaessiger Dateiname (siehe Beschreibung des Parameters NAME).';
+	                32913: // W#16#8091 in Dezimal (nur S7-1500)
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Parameter "NAME" ist kein String.';
+	                32915: // W#16#8093 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Data Log existiert bereits.';
+	                32919: // W#16#8097 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Laenge der Datei ueberschreitet Begrenzung des Dateisystems oder CPU-spezifische Begrenzung.';
+	                32930: // W#16#80A2 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Schreibfehler vom Dateisystem zurueckgegeben.';
+	                32946: // W#16#80B2 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Maximale Anzahl von DataLogs ueberschritten.';
+	                32947: // W#16#80B3 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Speicherplatz auf der Memory Card nicht ausreichend.';
+	                32948: // W#16#80B4 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Memory Card ist schreibgeschuetzt.';
+	                32960: // W#16#80C0 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Zugriff momentan nicht moeglich.';
+	                32961: // W#16#80C1 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Zu viele Data Logs geoeffnet.';
+	                33363: // W#16#8253 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Ungueltiger Wert am Parameter RECORDS.';
+	                33619: // W#16#8353 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Ungueltige Formatauswahl.';
+	                33875: // W#16#8453 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Ungueltige Zeitstempelung.';
+	                35620: // W#16#8B24 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Zuweisung am Parameter HEADER ungueltig (zum Beispiel: Zeigt auf lokalen Speicher).';
+	                35665: // W#16#8B51 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Unzulaessiger Datentyp am Parameter HEADER oder Laenge ueberschreitet die maximale Groesse.';
+	                35876: // W#16#8C24 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Zuweisung am Parameter DATA ungueltig (zum Beispiel: Zeigt auf lokalen Speicher).';
+	                35905: // W#16#8C51 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Unzulaessiger Datentyp am Parameter DATA / Datenstruktur kann nicht verwendet werden.';
+	                35906: // W#16#8C52 in Dezimal
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Struktur am Parameter DATA enthaelt mehr als 256 Elemente.';
+	                ELSE
+	                    "DB_LogMsg".DLcreate.memStatusMsg := 'Unbekannter Fehlercode';
+	            END_CASE;
+	        END_REGION
+	END_REGION
+	
+	
+	REGION DataLogClose
+	    // SchlieÃŸen des Datenprotokolls
+	    // Setzen Sie "DLclose.execute" auf "TRUE", um das Datenprotokoll zu schlieÃŸen.
+	    IF "DB_LogMsg".DLnewfile.execute THEN
+	        "DB_LogMsg".DLclose.execute := TRUE;
+	    END_IF;
+	    IF "DB_LogMsg".DLclose.execute THEN
+	        "fc_LogMsg_CallEntry"();
+	    END_IF;
+	    
+	    IF "DB_LogMsg".logID <> 0 THEN
+	        #DataLogClose_Instance(REQ := "DB_LogMsg".DLclose.execute,
+	                               DONE => "DB_LogMsg".DLclose.done,
+	                               BUSY => "DB_LogMsg".DLclose.busy,
+	                               ERROR => "DB_LogMsg".DLclose.error,
+	                               STATUS => "DB_LogMsg".DLclose.status,
+	                               ID := "DB_LogMsg".logID);
+	    END_IF;
+	    
+	    
+	    
+	    IF "DB_LogMsg".DLclose.execute THEN
+	        "DB_LogMsg".DLclose.execute := FALSE;
+	    END_IF;
+	    
+	    // Fehlerbehandlung und Speichern des Status
+	    IF "DB_LogMsg".DLclose.error OR "DB_LogMsg".DLclose.done THEN
+	        "DB_LogMsg".DLclose.memStatus := "DB_LogMsg".DLclose.status;
+	    END_IF;
+	    
+	    // Erfasst den DONE-Ausgang von DataLogClose
+	    IF "DB_LogMsg".DLclose.done THEN
+	        "fc_LogMsg_CallEntry"();
+	        "DB_LogMsg".DLclose.memDone := TRUE;
+	        "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].DLclosed := "DB_LogMsg".DLclose.memDone;
+	    END_IF;
+	    REGION StatusDataLogClose
+	        CASE "DB_LogMsg".DLclose.memStatus OF
+	            0:
+	                "DB_LogMsg".DLclose.memStatusMsg := 'Keine Fehler.';
+	            1:
+	                "DB_LogMsg".DLclose.memStatusMsg := 'Data Log nicht geoeffnet.';
+	            7000:
+	                "DB_LogMsg".DLclose.memStatusMsg := 'Keine Auftragsbearbeitung aktiv.';
+	            7001:
+	                "DB_LogMsg".DLclose.memStatusMsg := 'Beginn der Auftragsbearbeitung. Parameter BUSY = 1, DONE = 0.';
+	            7002:
+	                "DB_LogMsg".DLclose.memStatusMsg := 'Zwischenaufruf (REQ irrelevant): Anweisung bereits aktiv; BUSY hat den Wert "1".';
+	            32880: // W#16#8070 in Dezimal
+	                "DB_LogMsg".DLclose.memStatusMsg := 'Die maximale Anzahl gleichzeitig aktiver DataLogClose-Anweisungen wurde bereits erreicht.';
+	            32914: // W#16#8092 in Dezimal
+	                "DB_LogMsg".DLclose.memStatusMsg := 'Data Log existiert nicht.';
+	            32948: // W#16#80B4 in Dezimal (nur S7-1500)
+	                "DB_LogMsg".DLclose.memStatusMsg := 'Memory Card ist schreibgeschuetzt.';
+	            32960: // W#16#80C0 in Dezimal (nur S7-1500)
+	                "DB_LogMsg".DLclose.memStatusMsg := 'Zugriff momentan nicht moeglich.';
+	            ELSE
+	                "DB_LogMsg".DLclose.memStatusMsg := 'Unbekannter Fehlercode';
+	        END_CASE;
+	    END_REGION
+	END_REGION
+	
+	
+	REGION DataLogOpen
+	    
+	    IF "DB_LogMsg".Parameter.Auto_open AND
+	        NOT "DB_LogMsg".DLclose.execute AND
+	        NOT "DB_LogMsg".DLnewfile.execute AND
+	        NOT "DB_LogMsg".DLnewfile.busy AND
+	        ("DB_LogMsg".DLwrite.status = 16#80B0 OR (#LoggingOn AND "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].DLclosed)) THEN // 'Data Log ist nicht geoeffnet.'
+	        "DB_LogMsg".DLopen.execute := TRUE;
+	    END_IF;
+	    
+	    // Bestehende Datei öffnen wenn diese schon existiert um diese zu üerschreiben. 
+	    IF "DB_LogMsg".DLnewfile.status = 16#8093 THEN  // Statuscode: Neues Data Log existiert bereits
+	        "fc_LogMsg_NextEntry"();
+	        "fc_LogMsg_CallEntry"();
+	    END_IF;
+	    
+	    // Setzen Sie "DLopen.execute" auf "TRUE", um das erstellte Datenprotokoll zu Ã¶ffnen.
+	    IF "DB_LogMsg".DLopen.execute THEN
+	        "fc_LogMsg_CallEntry"();
+	    END_IF;
+	    
+	    #DataLogOpen_Instance(REQ := "DB_LogMsg".DLopen.execute,
+	                          MODE := 0,
+	                          NAME := "DB_LogMsg".name,
+	                          DONE => "DB_LogMsg".DLopen.done,
+	                          BUSY => "DB_LogMsg".DLopen.busy,
+	                          ERROR => "DB_LogMsg".DLopen.error,
+	                          STATUS => "DB_LogMsg".DLopen.status,
+	                          ID := "DB_LogMsg".logID,
+	                          Data := "DB_LogMsg".myData);
+	    
+	    IF "DB_LogMsg".DLopen.execute THEN
+	        "DB_LogMsg".DLopen.execute := FALSE;
+	    END_IF;
+	    
+	    // Fehlerbehandlung und Speichern des Status
+	    IF "DB_LogMsg".DLopen.error OR "DB_LogMsg".DLopen.done THEN
+	        "DB_LogMsg".DLopen.memStatus := "DB_LogMsg".DLopen.status;
+	    END_IF;
+	    
+	    IF "DB_LogMsg".DLopen.execute AND
+	        "DB_LogMsg".DLopen.memStatus = 16#0002 THEN // 'Warnung: Data Log-Datei wurde bereits durch diese Anwendung geoeffnet.'
+	        "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].DLclosed := FALSE;
+	    ELSIF "DB_LogMsg".DLwrite.done THEN
+	        "DB_LogMsg".DLopen.memStatus := 0;
+	    END_IF;
+	    
+	    // Erfasst den DONE-Ausgang von DataLogOpen
+	    IF "DB_LogMsg".DLopen.done THEN
+	        "DB_LogMsg".DLopen.memDone := TRUE;
+	        "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].DLclosed := NOT ("DB_LogMsg".DLopen.memDone);
+	    END_IF;
+	    
+	    
+	    REGION StatusDataLogOpen
+	        CASE "DB_LogMsg".DLopen.memStatus OF
+	            0:
+	                "DB_LogMsg".DLopen.memStatusMsg := 'Keine Fehler.';
+	            2:
+	                "DB_LogMsg".DLopen.memStatusMsg := 'Warnung: Data Log-Datei wurde bereits durch diese Anwendung geoeffnet.';
+	            7000:
+	                "DB_LogMsg".DLopen.memStatusMsg := 'Keine Auftragsbearbeitung aktiv.';
+	            7001:
+	                "DB_LogMsg".DLopen.memStatusMsg := 'Beginn der Auftragsbearbeitung. Parameter BUSY = 1, DONE = 0.';
+	            7002:
+	                "DB_LogMsg".DLopen.memStatusMsg := 'Zwischenaufruf (REQ irrelevant): Anweisung bereits aktiv; BUSY hat den Wert "1".';
+	            32880: // W#16#8070 in Dezimal
+	                "DB_LogMsg".DLopen.memStatusMsg := 'Die maximale Anzahl gleichzeitig aktiver DataLogOpen-Anweisungen wurde bereits erreicht.';
+	            32912: // W#16#8090 in Dezimal
+	                "DB_LogMsg".DLopen.memStatusMsg := 'Datentypen inkonsistent. Das Data Log am Parameter ID verwendet andere Datentypen als am Parameter DATA angegeben.';
+	            32913: // W#16#8091 in Dezimal
+	                "DB_LogMsg".DLopen.memStatusMsg := 'Am Parameter NAME wurde ein anderer Datentyp als String verwendet.';
+	            32914: // W#16#8092 in Dezimal
+	                "DB_LogMsg".DLopen.memStatusMsg := 'Data Log existiert nicht.';
+	            32948: // W#16#80B4 in Dezimal
+	                "DB_LogMsg".DLopen.memStatusMsg := 'Memory Card oder Data Log-Datei ist schreibgeschuetzt.';
+	            32960: // W#16#80C0 in Dezimal
+	                "DB_LogMsg".DLopen.memStatusMsg := 'Zugriff momentan nicht moeglich. Dies kann z. B. beim Laden im RUN der Fall sein.';
+	            32961: // W#16#80C1 in Dezimal
+	                "DB_LogMsg".DLopen.memStatusMsg := 'Zu viele Dateien geoeffnet.';
+	            ELSE
+	                "DB_LogMsg".DLopen.memStatusMsg := 'Unbekannter Fehlercode';
+	        END_CASE;
+	    END_REGION
+	    
+	END_REGION
+	
+	
+	REGION DataLogWrite
+	    // Verwaltung des Schreibens in Datenprotokolle
+	    
+	    
+	    // Setzen Sie "DLwrite.execute" auf "TRUE", um neue Werte in die Variablen von "myData" zu schreiben.
+	    IF "DB_LogMsg".DLwrite.execute AND NOT "DB_LogMsg".DLclose.execute AND "DB_LogMsg".DLcreate.dlogCreated THEN
+	        "DB_LogMsg".myData := "DB_LogMsg".DLwrite.Preset;
+	        // WÃ¤hlen Sie einen Eintrag der Datenprotokolle aus
+	        "fc_LogMsg_CallEntry"();
+	    END_IF;
+	    
+	    // Schreibt neue Werte in das erstellte Datenprotokoll
+	    #DataLogWrite_Instance(REQ := "DB_LogMsg".DLwrite.execute AND "DB_LogMsg".DLcreate.dlogCreated,
+	                           DONE => "DB_LogMsg".DLwrite.done,
+	                           BUSY => "DB_LogMsg".DLwrite.busy,
+	                           ERROR => "DB_LogMsg".DLwrite.error,
+	                           STATUS => "DB_LogMsg".DLwrite.status,
+	                           ID := "DB_LogMsg".logID);
+	    
+	    IF "DB_LogMsg".DLwrite.execute THEN
+	        "DB_LogMsg".DLwrite.execute := FALSE;
+	    END_IF;
+	    
+	    // Fehlerbehandlung und Speichern des Status
+	    IF "DB_LogMsg".DLwrite.error OR "DB_LogMsg".DLwrite.done THEN
+	        "DB_LogMsg".DLwrite.memStatus := "DB_LogMsg".DLwrite.status;
+	    END_IF;
+	    
+	    // Erfasst den DONE-Ausgang von DataLogWrite
+	    IF "DB_LogMsg".DLwrite.done THEN
+	        "DB_LogMsg".DLwrite.memDone := TRUE;
+	        "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].DLclosed := FALSE;
+	    END_IF;
+	    
+	    IF "DB_LogMsg".Parameter.Auto_NewFile AND "DB_LogMsg".DLwrite.status = 16#0001 THEN // Letzter moeglicher Datensatz am Ende der Datei erstellt
+	        "DB_LogMsg".DLnewfile.execute := TRUE;
+	    END_IF;
+	    
+	    REGION StatusDataLogWrite
+	        CASE "DB_LogMsg".DLwrite.memStatus OF
+	            0:
+	                "DB_LogMsg".DLwrite.memStatusMsg := 'Keine Fehler.';
+	            1: // W#16#0001 in Dezimal
+	                "DB_LogMsg".DLwrite.memStatusMsg := 'Letzter moeglicher Datensatz am Ende der Datei erstellt. Beim Erstellen eines weiteren Datensatzes wird ein aelterer ueberschrieben.';
+	                "DB_LogMsg".Parameter.NextID := 0;
+	            7000:
+	                "DB_LogMsg".DLwrite.memStatusMsg := 'Keine Auftragsbearbeitung aktiv.';
+	            7001:
+	                "DB_LogMsg".DLwrite.memStatusMsg := 'Beginn der Auftragsbearbeitung. Parameter BUSY = 1, DONE = 0.';
+	            7002:
+	                "DB_LogMsg".DLwrite.memStatusMsg := 'Zwischenaufruf (REQ irrelevant): Anweisung bereits aktiv; BUSY hat den Wert "1".';
+	            32880: // W#16#8070 in Dezimal
+	                "DB_LogMsg".DLwrite.memStatusMsg := 'Die maximale Anzahl gleichzeitig aktiver DataLogWrite-Anweisungen wurde bereits erreicht.';
+	            32912: // W#16#8090 in Dezimal
+	                "DB_LogMsg".DLwrite.memStatusMsg := 'Data-Log-Definition stimmt nicht mit dem vorhandenen Data Log ueberein.';
+	            32914: // W#16#8092 in Dezimal
+	                "DB_LogMsg".DLwrite.memStatusMsg := 'Data Log existiert nicht.';
+	            32915: // W#16#8093 in Dezimal
+	                "DB_LogMsg".DLwrite.memStatusMsg := 'Es wurde kein Datensatz geschrieben, weil sich am DB, der den Parameter DATA enthaelt, seit der Erstellung des Data Logs etwas geaendert hat.';
+	            32930: // W#16#80A2 in Dezimal
+	                "DB_LogMsg".DLwrite.memStatusMsg := 'Schreibfehler durch das Dateisystem zurueckgemeldet.';
+	            32944: // W#16#80B0 in Dezimal
+	                "DB_LogMsg".DLwrite.memStatusMsg := 'Data Log ist nicht geoeffnet.';
+	            32947: // W#16#80B3 in Dezimal
+	                "DB_LogMsg".DLwrite.memStatusMsg := 'Speicherplatz auf der Memory Card nicht ausreichend. Der letzte Schreibvorgang wurde unterbrochen. Die Data Log-Datei ist jetzt sehr wahrscheinlich beschaedigt und sollte nicht mehr benutzt werden.';
+	            32948: // W#16#80B4 in Dezimal
+	                "DB_LogMsg".DLwrite.memStatusMsg := 'Memory Card ist schreibgeschuetzt.';
+	            ELSE
+	                "DB_LogMsg".DLwrite.memStatusMsg := 'Unbekannter Fehlercode';
+	        END_CASE;
+	    END_REGION
+	END_REGION
+	
+	REGION DataLogNewFile
+	    // Erstellung eines neuen Datenprotokolls aus einem bestehenden
+	    // Setzen Sie "DLnewfile.execute" auf "TRUE", um ein neues Datenprotokoll zu erstellen.
+	    
+	    IF "DB_LogMsg".DLnewfile.execute THEN
+	        "fc_LogMsg_CallEntry"();
+	    END_IF;
+	    
+	    IF "DB_LogMsg".name <> #EMPTYSTRING THEN
+	        #DataLogNewFile_Instance(REQ := "DB_LogMsg".DLnewfile.execute,
+	                                 RECORDS := "DB_LogMsg".Parameter.newRECORDS,
+	                                 NAME := "DB_LogMsg".newName,
+	                                 ID := "DB_LogMsg".logID,
+	                                 DONE => "DB_LogMsg".DLnewfile.done,
+	                                 BUSY => "DB_LogMsg".DLnewfile.busy,
+	                                 ERROR => "DB_LogMsg".DLnewfile.error,
+	                                 STATUS => "DB_LogMsg".DLnewfile.status,
+	                                 Data := "DB_LogMsg".myData);
+	    END_IF;
+	    
+	    IF "DB_LogMsg".DLnewfile.execute AND "DB_LogMsg".DLclose.done THEN
+	        "DB_LogMsg".DLnewfile.execute := FALSE;
+	    END_IF;
+	    
+	    // Fehlerbehandlung und Speichern des Status
+	    IF "DB_LogMsg".DLnewfile.error OR "DB_LogMsg".DLnewfile.done THEN
+	        "DB_LogMsg".DLnewfile.memStatus := "DB_LogMsg".DLnewfile.status;
+	    END_IF;
+	    
+	    // Erfasst den DONE-Ausgang von DataLogNewFile
+	    IF "DB_LogMsg".DLnewfile.done THEN
+	        "DB_LogMsg".Parameter.NextID := 0;
+	        "DB_LogMsg".DLnewfile.newFileCreated := TRUE;
+	        // Speichert den Namen und die ID des neuen Datenprotokolls in der Datenbank "dataLogEntries".
+	        "DB_LogMsg".dataLogEntries["DB_LogMsg".nextPosInStack].name := "DB_LogMsg".newName;
+	        "DB_LogMsg".dataLogEntries["DB_LogMsg".nextPosInStack].ID := "DB_LogMsg".logID;
+	        "fc_LogMsg_NextEntry"();
+	        
+	        
+	        
+	    END_IF;
+	    REGION StatusDataLogNewFile
+	        CASE "DB_LogMsg".DLnewfile.memStatus OF
+	            0:
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Keine Fehler.';
+	            7000:
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Keine Auftragsbearbeitung aktiv.';
+	            7001:
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Beginn der Auftragsbearbeitung. Parameter BUSY = 1, DONE = 0.';
+	            7002:
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Zwischenaufruf (REQ irrelevant): Anweisung bereits aktiv; BUSY hat den Wert "1".';
+	            32880: // W#16#8070 in Dezimal
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Die maximale Anzahl gleichzeitig aktiver DataLogNewFile-Anweisungen wurde bereits erreicht.';
+	            32912: // W#16#8090 in Dezimal
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Ungueltiger Dateiname.';
+	            32913: // W#16#8091 in Dezimal
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Datentyp am Parameter NAME ist kein STRING.';
+	            32914: // W#16#8092 in Dezimal
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Quellen-Data Log existiert nicht.';
+	            32915: // W#16#8093 in Dezimal
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Neues Data Log existiert bereits.';
+	            32919: // W#16#8097 in Dezimal
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Laenge der Datei ueberschreitet Begrenzung des Dateisystems oder CPU-spezifische Begrenzungen.';
+	            32928: // W#16#80A0 in Dezimal
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Datentypen inkonsistent. Das Data Log am Parameter ID verwendet andere Datentypen als am Parameter DATA angegeben.';
+	            32930: // W#16#80A2 in Dezimal
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Schreibfehler durch das Dateisystem zurueckgemeldet.';
+	            32946: // W#16#80B2 in Dezimal
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Maximale Anzahl von DataLogs ueberschritten oder DataLog-Ressourcen aufgebraucht.';
+	            32947: // W#16#80B3 in Dezimal
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Ladespeicher nicht ausreichend.';
+	            32948: // W#16#80B4 in Dezimal
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Memory Card ist schreibgeschuetzt.';
+	            32960: // W#16#80C0 in Dezimal
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Zugriff momentan nicht moeglich.';
+	            32961: // W#16#80C1 in Dezimal
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Zu viele Dateien geoeffnet.';
+	            33363: // W#16#8253 in Dezimal
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Ungueltiger Wert am Parameter RECORDS.';
+	            ELSE
+	                "DB_LogMsg".DLnewfile.memStatusMsg := 'Unbekannter Fehlercode';
+	        END_CASE;
+	    END_REGION
+	    
+	END_REGION
+	
+	
+	REGION DataLogDelete
+	    REGION Delete All Entrys
+	        
+	        // Konstanten zuweisen mit alle möglichen IDs
+	        #LEnr[0] := #LENr0;
+	        #LEnr[1] := #LENr1;
+	        #LEnr[2] := #LENr2;
+	        #LEnr[3] := #LENr3;
+	        #LEnr[4] := #LENr4;
+	        #LEnr[5] := #LENr5;
+	        #LEnr[6] := #LENr6;
+	        #LEnr[7] := #LENr7;
+	        
+	        (* 
+	        State 0 = Init
+	        State 1 = Stopp All Logs
+	        State 2 = Delete Entry 0
+	        State 3 = Delete Entry 1
+	        State 4 = Delete Entry 2
+	        State 5 = Delete Entry 3
+	        State 6 = Delete Entry 4
+	        State 7 = Delete Entry 5
+	        State 8 = Delete Entry 6
+	        State 9 = Delete Entry 7  
+	    *)
+	        
+	        IF #DeleteState = 0 THEN
+	            IF "DB_LogMsg".deleteAll THEN
+	                #DeleteState := 1;
+	                "DB_LogMsg".deleteAll := FALSE;
+	            END_IF;
+	            #i2 := -1;
+	        ELSIF #DeleteState = 1 THEN
+	            FOR #i := 0 TO "DB_LogMsg".Parameter.MaxLoggingTags - 1 DO
+	                IF "DB_LogMsg".Parameter.LoggingTag[#i].On THEN
+	                    #AllTagOff := TRUE;
+	                END_IF;
+	            END_FOR;
+	            IF NOT #AllTagOff THEN
+	                #DeleteState := 2;
+	            END_IF;
+	            "DB_LogMsg".Parameter.Auto_open := FALSE;
+	            "DB_LogMsg".Parameter.Auto_NewFile := FALSE;
+	            "DB_LogMsg".TurnAlloff := TRUE;
+	        ELSIF #DeleteState >= 2 AND #DeleteState <= 9 THEN
+	            // Setze den LogEntryIndex für die aktuellen Zustände
+	            "DB_LogMsg".LogEntryIndex := #DeleteState - 2;
+	            
+	            // Lösche die Einträge, wenn noch nicht abgeschlossen
+	            IF "DB_LogMsg".DLdelete.done OR (#i2 > 0 AND #i2 >= "DB_LogMsg".Parameter.maxPosEntry - 1) THEN
+	                #DeleteState := #DeleteState + 1;
+	                "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].name := '';
+	                "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].ID := 0;
+	                IF #DeleteState = 10 THEN
+	                    #DeleteState := 0;
+	                    "DB_LogMsg".LogEntryIndex := 0;
+	                    "DB_LogMsg".reset := true;
+	                END_IF;
+	                #i2 := -1;
+	            ELSE
+	                // Überprüfe, ob der Eintrag gelöscht werden kann
+	                IF #i2 < "DB_LogMsg".Parameter.maxPosEntry AND NOT "DB_LogMsg".DLdelete.execute AND NOT "DB_LogMsg".DLdelete.busy THEN
+	                    #i2 := #i2 + 1;
+	                    "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].ID := #LEnr[#i2];
+	                    "DB_LogMsg".DLdelete.execute := TRUE;
+	                END_IF;
+	            END_IF;
+	        END_IF;
+	        (* ELSIF #DeleteState = 2 THEN
+	            "DB_LogMsg".LogEntryIndex := 0;
+	            IF "DB_LogMsg".DLdelete.done OR (#i2 > 0 AND #i2 >= "DB_LogMsg".Parameter.maxPosEntry - 1) THEN
+	                #DeleteState := 3;
+	                #i2 := -1;
+	            ELSE
+	                IF #i2 < "DB_LogMsg".Parameter.maxPosEntry AND NOT "DB_LogMsg".DLdelete.execute AND NOT "DB_LogMsg".DLdelete.busy THEN
+	                    #i2 := #i2 + 1;
+	                    "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].ID := #LEnr[#i2];
+	                    "DB_LogMsg".DLdelete.execute := TRUE;
+	                END_IF;
+	            END_IF;
+	            
+	        ELSIF #DeleteState = 3 THEN
+	            "DB_LogMsg".LogEntryIndex := 1;
+	            
+	            IF "DB_LogMsg".DLdelete.done OR (#i2 > 0 AND #i2 >= "DB_LogMsg".Parameter.maxPosEntry - 1) THEN
+	                #DeleteState := 4;
+	                #i2 := -1;
+	            ELSE
+	                IF #i2 < "DB_LogMsg".Parameter.maxPosEntry AND NOT "DB_LogMsg".DLdelete.execute AND NOT "DB_LogMsg".DLdelete.busy THEN
+	                    #i2 := #i2 + 1;
+	                    "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].ID := #LEnr[#i2];
+	                    "DB_LogMsg".DLdelete.execute := TRUE;
+	                END_IF;
+	            END_IF;
+	            
+	        ELSIF #DeleteState = 4 THEN
+	            "DB_LogMsg".LogEntryIndex := 2;
+	            IF "DB_LogMsg".DLdelete.done OR (#i2 > 0 AND #i2 >= "DB_LogMsg".Parameter.maxPosEntry - 1) THEN
+	                #DeleteState := 5;
+	                #i2 := -1;
+	            ELSE
+	                IF #i2 < "DB_LogMsg".Parameter.maxPosEntry AND NOT "DB_LogMsg".DLdelete.execute AND NOT "DB_LogMsg".DLdelete.busy THEN
+	                    #i2 := #i2 + 1;
+	                END_IF;
+	                "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].ID := #LEnr[#i2];
+	                "DB_LogMsg".DLdelete.execute := TRUE;
+	            END_IF;
+	            
+	        ELSIF #DeleteState = 5 THEN
+	            "DB_LogMsg".LogEntryIndex := 3;
+	            IF "DB_LogMsg".DLdelete.done OR (#i2 > 0 AND #i2 >= "DB_LogMsg".Parameter.maxPosEntry - 1) THEN
+	                #DeleteState := 6;
+	                #i2 := -1;
+	            ELSE
+	                IF #i2 < "DB_LogMsg".Parameter.maxPosEntry AND NOT "DB_LogMsg".DLdelete.execute AND NOT "DB_LogMsg".DLdelete.busy THEN
+	                    #i2 := #i2 + 1;
+	                    "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].ID := #LEnr[#i2];
+	                    "DB_LogMsg".DLdelete.execute := TRUE;
+	                END_IF;
+	            END_IF;
+	            
+	        ELSIF #DeleteState = 6 THEN
+	            "DB_LogMsg".LogEntryIndex := 4;
+	            IF "DB_LogMsg".DLdelete.done OR (#i2 > 0 AND #i2 >= "DB_LogMsg".Parameter.maxPosEntry - 1) THEN
+	                #DeleteState := 7;
+	                #i2 := -1;
+	            ELSE
+	                IF #i2 < "DB_LogMsg".Parameter.maxPosEntry AND NOT "DB_LogMsg".DLdelete.execute AND NOT "DB_LogMsg".DLdelete.busy THEN
+	                    #i2 := #i2 + 1;
+	                    "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].ID := #LEnr[#i2];
+	                    "DB_LogMsg".DLdelete.execute := TRUE;
+	                END_IF;
+	            END_IF;
+	            
+	        ELSIF #DeleteState = 7 THEN
+	            "DB_LogMsg".LogEntryIndex := 5;
+	            IF "DB_LogMsg".DLdelete.done OR (#i2 > 0 AND #i2 >= "DB_LogMsg".Parameter.maxPosEntry - 1) THEN
+	                #DeleteState := 8;
+	                #i2 := -1;
+	            ELSE
+	                IF #i2 < "DB_LogMsg".Parameter.maxPosEntry AND NOT "DB_LogMsg".DLdelete.execute AND NOT "DB_LogMsg".DLdelete.busy THEN
+	                    #i2 := #i2 + 1;
+	                    "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].ID := #LEnr[#i2];
+	                    "DB_LogMsg".DLdelete.execute := TRUE;
+	                END_IF;
+	            END_IF;
+	            
+	        ELSIF #DeleteState = 8 THEN
+	            "DB_LogMsg".LogEntryIndex := 6;
+	            IF "DB_LogMsg".DLdelete.done OR (#i2 > 0 AND #i2 >= "DB_LogMsg".Parameter.maxPosEntry - 1) THEN
+	                #DeleteState := 9;
+	                #i2 := -1;
+	            ELSE
+	                IF #i2 < "DB_LogMsg".Parameter.maxPosEntry AND NOT "DB_LogMsg".DLdelete.execute AND NOT "DB_LogMsg".DLdelete.busy THEN
+	                    #i2 := #i2 + 1;
+	                    "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].ID := #LEnr[#i2];
+	                    "DB_LogMsg".DLdelete.execute := TRUE;
+	                END_IF;
+	            END_IF;
+	            
+	        ELSIF #DeleteState = 9 THEN
+	            "DB_LogMsg".LogEntryIndex := 7;
+	            IF "DB_LogMsg".DLdelete.done OR (#i2 > 0 AND #i2 >= "DB_LogMsg".Parameter.maxPosEntry - 1) THEN
+	                #DeleteState := 0;
+	                "DB_LogMsg".LogEntryIndex := 0;
+	            ELSE
+	                IF #i2 < "DB_LogMsg".Parameter.maxPosEntry AND NOT "DB_LogMsg".DLdelete.execute AND NOT "DB_LogMsg".DLdelete.busy THEN
+	                    #i2 := #i2 + 1;
+	                    "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].ID := #LEnr[#i2];
+	                    "DB_LogMsg".DLdelete.execute := TRUE;
+	                END_IF;
+	                
+	            END_IF;
+	        END_IF; *)
+	    END_REGION
+	    
+	    
+	    
+	    // Löschen eines Datenprotokolls
+	    // Setzen Sie "DLdelete.execute" auf "TRUE", um das Datenprotokoll zu lÃ¶schen.
+	    
+	    IF "DB_LogMsg".DLdelete.execute THEN
+	        "fc_LogMsg_CallEntry"();
+	    END_IF;
+	    
+	    #DataLogDelete_Instance(REQ := "DB_LogMsg".DLdelete.execute,
+	                            NAME := "DB_LogMsg".name,
+	                            DelFile := "DB_LogMsg".DLdelete.deleteMode,
+	                            DONE => "DB_LogMsg".DLdelete.done,
+	                            BUSY => "DB_LogMsg".DLdelete.busy,
+	                            ERROR => "DB_LogMsg".DLdelete.error,
+	                            STATUS => "DB_LogMsg".DLdelete.status,
+	                            ID := "DB_LogMsg".logID);
+	    
+	    IF "DB_LogMsg".DLdelete.execute THEN
+	        "DB_LogMsg".DLdelete.execute := FALSE;
+	    END_IF;
+	    
+	    // Fehlerbehandlung und Speichern des Status
+	    IF "DB_LogMsg".DLdelete.error OR "DB_LogMsg".DLdelete.done THEN
+	        "DB_LogMsg".DLdelete.memStatus := "DB_LogMsg".DLdelete.status;
+	    END_IF;
+	    
+	    // Erfasst den DONE-Ausgang von DataLogDelete
+	    IF "DB_LogMsg".DLdelete.done THEN
+	        "DB_LogMsg".DLdelete.dlogDeleted := TRUE;
+	        "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].name := #EMPTYSTRING;
+	        "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].ID := 0;
+	        "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].DLclosed := FALSE;
+	    // ELSIF "DB_LogMsg".DLdelete.status = 16#8092 THEN // 'Data Log existiert nicht.'
+	    //     // "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].name := #EMPTYSTRING;
+	    //     // "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].ID := 0;
+	    //     // "DB_LogMsg".dataLogEntries["DB_LogMsg".LogEntryIndex].DLclosed := FALSE;
+	    //     "fc_LogMsg_NextEntry"();
+	        
+	        
+	    END_IF;
+	    REGION StatusDataLogDelete
+	        CASE "DB_LogMsg".DLdelete.memStatus OF
+	            0:
+	                "DB_LogMsg".DLdelete.memStatusMsg := 'Keine Fehler.';
+	            7000:
+	                "DB_LogMsg".DLdelete.memStatusMsg := 'Keine Auftragsbearbeitung aktiv.';
+	            7001:
+	                "DB_LogMsg".DLdelete.memStatusMsg := 'Beginn der Auftragsbearbeitung. Parameter BUSY = 1, DONE = 0.';
+	            7002:
+	                "DB_LogMsg".DLdelete.memStatusMsg := 'Zwischenaufruf (REQ irrelevant): Anweisung bereits aktiv; BUSY hat den Wert "1".';
+	            32880: // W#16#8070 in Dezimal
+	                "DB_LogMsg".DLdelete.memStatusMsg := 'Die maximale Anzahl gleichzeitig aktiver DataLogDelete-Anweisungen wurde bereits erreicht.';
+	            32913: // W#16#8091 in Dezimal
+	                "DB_LogMsg".DLdelete.memStatusMsg := 'Am Parameter NAME wird ein anderer Datentyp als STRING verwendet.';
+	            32914: // W#16#8092 in Dezimal
+	                "DB_LogMsg".DLdelete.memStatusMsg := 'Data Log existiert nicht.';
+	            32930: // W#16#80A2 in Dezimal
+	                "DB_LogMsg".DLdelete.memStatusMsg := 'Schreibfehler durch das Dateisystem zurueckgemeldet.';
+	            32948: // W#16#80B4 in Dezimal
+	                "DB_LogMsg".DLdelete.memStatusMsg := 'Memory-Card ist schreibgeschuetzt.';
+	            32960: // W#16#80C0 in Dezimal
+	                "DB_LogMsg".DLdelete.memStatusMsg := 'Zugriff momentan nicht moeglich.';
+	            ELSE
+	                "DB_LogMsg".DLdelete.memStatusMsg := 'Unbekannter Fehlercode';
+	        END_CASE;
+	    END_REGION
+	    
+	END_REGION
+	
+	REGION Reset
+	    // Statement section REGION
+	    IF "DB_LogMsg".reset THEN
+	        // Reset Mem Errors
+	        "DB_LogMsg".DLcreate.memStatus := 0;
+	        "DB_LogMsg".DLdelete.memStatus := 0;
+	        "DB_LogMsg".DLwrite.memStatus := 0;
+	        "DB_LogMsg".DLnewfile.memStatus := 0;
+	        "DB_LogMsg".DLclose.memStatus := 0;
+	        "DB_LogMsg".DLopen.memStatus := 0;
+	        
+	        // Reset Statistik
+	        "DB_LogMsg".Statistik.MaxBufferRecorded := 0;
+	        "DB_LogMsg".Statistik.F_Counter := 0;
+	        
+	        #DeleteState := 0;
+	        "DB_LogMsg".reset := FALSE;
+	    END_IF;
+	    
+	END_REGION
+	
+	REGION All ON/OFF
+	    IF "DB_LogMsg".TurnAllOn THEN
+	        "DB_LogMsg".TurnAlloff := FALSE;
+	        FOR #i := 0 TO "DB_LogMsg".Parameter.MaxLoggingTags - 1 DO
+	            "DB_LogMsg".Parameter.LoggingTag[#i].On := TRUE;
+	        END_FOR;
+	        "DB_LogMsg".TurnAllOn := FALSE;
+	    ELSIF "DB_LogMsg".TurnAlloff THEN
+	        "DB_LogMsg".TurnAllOn := FALSE;
+	        FOR #i := 0 TO "DB_LogMsg".Parameter.MaxLoggingTags - 1 DO
+	            "DB_LogMsg".Parameter.LoggingTag[#i].On := FALSE;
+	        END_FOR;
+	        "DB_LogMsg".TurnAlloff := FALSE;
+	    END_IF;
+	END_REGION
+	
+	
+	
+	
+	
+END_FUNCTION_BLOCK
+
+FUNCTION "fc_LogMsg_inputBool" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      InputState : Bool;
+      ActualState : Bool;
+      Text : String;
+      LogId : Int;
+   END_VAR
+
+
+BEGIN
+	
+	IF #InputState AND NOT #ActualState THEN
+	    "fc_LogMsg_InputBuffer"(Logging_i := #LogId,
+	                            Text := CONCAT(IN1:= #Text, IN2:=' TRUE'));
+	ELSIF NOT #InputState AND #ActualState THEN
+	    "fc_LogMsg_InputBuffer"(Logging_i := #LogId,
+	                            Text := CONCAT(IN1:= #Text, IN2:=' FALSE'));
+	END_IF;
+	
+END_FUNCTION
+

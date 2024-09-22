@@ -1,0 +1,504 @@
+TYPE "type_fc_pulse"
+TITLE = type_fc_pulse
+VERSION : 0.1
+//Variablen für die Funktion fc_pulse
+   STRUCT
+      Pulse_pos_Var : Bool;   // Ausgangsvariable der positiven Flanke                 //Output variable of the positive pulse
+      Pulse_neg_Var : Bool;   // Ausgangsvariable der negativen Flanke                 //Output variable of the negative pulse
+      Edge_flag_pos : Bool;   // Flankenmerker der pos. Flanke. Übergabe im Aufruf.    //Memory flag of the positive pulse. Assignment by call of the FC_Pulse
+      Edge_flag_neg : Bool;   // Flankenmerker der neg. Flanke. Übergabe im Aufruf.    //Memory flag of the negative pulse. Assignment by call of the FC_Pulse
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "typ_Timers_UDT"
+VERSION : 0.1
+   STRUCT
+      state : Int;   // current state of the timer
+      init_time : Int;   // initial time for the timer in 100ms
+      cur_time : Int;   // currently elapsed time for this timer
+      time_elapsed : Bool;   // true: timer has completed / false: timer is running or stopped
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "typ_Bedienung_Tuer"
+VERSION : 0.1
+   STRUCT
+      S_Anfordern : Bool;   // Taster Tür Anfordern
+      S_NA_Reset : Bool;   // Taster Not-Halt Reset
+      LM_Anfordern : Bool;   // Leuchtmelder Tür Anfordern
+      LM_NA_Reset : Bool;   // Leuchtmelder Not-Halt Reset
+      fc_pulse_S_Anfordern { S7_SetPoint := 'False'} : "type_fc_pulse";
+      fc_pulse_S_NA_Reset : "type_fc_pulse";
+   END_STRUCT;
+
+END_TYPE
+
+DATA_BLOCK "Timer_DB"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+   VAR 
+      interrupt_set : Bool;   // Interrupt of cyclib OB
+      update_counter : Int;   // Counter for cyclic updates
+      timers { S7_SetPoint := 'False'} : Array[0..600] of "typ_Timers_UDT";   //  This is the data structure for stateful timers. It can be used in a DB that holds this structure in an array. The index of the array will be the timer array. The following states are defined: 0: Off 1: Running 2: Held 3: Elapsed
+   END_VAR
+
+
+BEGIN
+
+END_DATA_BLOCK
+
+FUNCTION "TimerStateChange" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      new_state : Int;
+   END_VAR
+
+   VAR_IN_OUT 
+      actual_state : Int;
+   END_VAR
+
+
+BEGIN
+	    IF #actual_state <> #new_state THEN
+	        #actual_state := #new_state;
+	    END_IF;
+END_FUNCTION
+
+TYPE "typ_PUT_GET"
+VERSION : 0.1
+   STRUCT
+      PUT : Struct   // Variablen für die PUT Anweisung
+         start : Bool;
+         done : Bool;
+         memDoneStat : Word;
+         error : Bool;
+         status : Word;
+         memErrStatus : Word;
+      END_STRUCT;
+      GET : Struct   // Variablen für die GET Anweisung
+         start : Bool;
+         done : Bool;
+         memDoneStat : Word;
+         error : Bool;
+         status : Word;
+         memErrStatus : Word;
+      END_STRUCT;
+      PUT_Tooglebit : Bool;   // Tooglebit Variable die gesendet wird
+      GET_Tooglebit : Bool;   // Tooglebit Variable die empfangen wird (Wird ausgewertet)
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "type_DIAG_FDBACK"
+VERSION : 0.1
+   STRUCT
+      FDBACK_DIAG : Byte;   // Diagnosebyte
+      Bit_0_ERROR : Bool;   // Rücklesefehler oder falsche Rücklesezeit eingestellt (= Zustand von ERROR)
+      Bit_1_QBAD_FIO : Bool;   // Passivierung der vom Ausgang Q angesteuerten F‑Peripherie/des Kanals 
+      Bit_2_error_perm_0 : Bool;   // nach Rücklesefehler: Rückleseeingang hat permanent Signalzustand 0
+      Bit_3_Res3 : Bool;   // Reserve
+      Bit_4_Res4 : Bool;   // Reserve
+      Bit_5_error_ACK_perm_1 : Bool;   // bei Rücklesefehler: Eingang ACK hat permanent Signalzustand 1
+      Bit_6_ACK_REQ : Bool;   // Quittierung erforderlich (= Zustand von ACK_REQ)
+      Bit_7_Q : Bool;   // Zustand Ausgang Q
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "type_DIAG_ESTOP1"
+VERSION : 0.1
+   STRUCT
+      ESTOP1_DIAG : Byte;   // Diagnosebyte
+      Bit_0_error_TIM_DEL : Bool;   // falsche Verzögerungszeit TIM_DEL eingestellt
+      Bit_1_Res1 : Bool;   // Reserve
+      Bit_2_Res2 : Bool;   // Reserve
+      Bit_3_Res3 : Bool;   // Reserve
+      "Bit_4_error_NH/NA_aktiv" : Bool;   // Quittierung nicht möglich, da NOT-HALT/NOT-AUS noch aktiv
+      Bit_5_error_ACK_perm_1 : Bool;   // bei fehlender Freigabe: Eingang ACK hat permanent Signalzustand 1
+      Bit_6_ACK_REQ : Bool;   // Quittierung erforderlich (= Zustand von ACK_REQ)
+      Bit_7_Q : Bool;   // Zustand Ausgang Q
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "type_DIAG_SFDOOR"
+VERSION : 0.1
+   STRUCT
+      SFDOOR_DIAG : Byte;   // Diagnosebyte
+      Bit_0_Res0 : Bool;   // Reserve
+      "Bit_1_IN1-2_Missing_False" : Bool;   // Schutztür wurde bei OPEN_NEC = 1 nach Anlauf des F‑Systems nicht vollständig geöffnet, geöffnete Schutztür wurde nicht vollständig geöffnet, Verdrahtungsfehler, Positionsschalter defekt, Positionsschalter falsch justiert
+      "Bit_2_IN1-2_Missing_True" : Bool;   // Schutztür wurde nicht geschlossen, Verdrahtungsfehler, Positionsschalter defekt, Positionsschalter falsch justiert
+      Bit_3_F_FAULT : Bool;   // F‑Peripheriefehler, Kanalfehler oder Kommunikationsfehler oder Passivierung über PASS_ON der F‑Peripherie/des Kanals von IN1 und/oder IN2
+      Bit_4_Res4 : Bool;   // Reserve
+      Bit_5_error_ACK_perm_1 : Bool;   // bei fehlender Freigabe: Eingang ACK hat permanent Signalzustand 1
+      Bit_6_ACK_REQ : Bool;   // Quittierung erforderlich (= Zustand von ACK_REQ)
+      Bit_7_Q : Bool;   // Zustand Ausgang Q
+   END_STRUCT;
+
+END_TYPE
+
+DATA_BLOCK "Timer_values_DB"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+   VAR 
+      timer_value { S7_SetPoint := 'True'} : Array[0..600] of Int;
+   END_VAR
+
+
+BEGIN
+   timer_value[0] := 100;
+   timer_value[1] := 100;
+   timer_value[2] := 100;
+   timer_value[3] := 100;
+   timer_value[4] := 100;
+   timer_value[5] := 100;
+   timer_value[6] := 100;
+   timer_value[10] := 30;
+   timer_value[11] := 50;
+
+END_DATA_BLOCK
+
+FUNCTION "TimerStart" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      Timer_Nr : Int;
+      "Time" : Int;   // Time in Sec * 10
+   END_VAR
+
+
+BEGIN
+	    IF "Timer_DB".timers[#Timer_Nr].state = 0 THEN
+	        "Timer_DB".timers[#Timer_Nr].init_time := #Time;
+	        "TimerStateChange"(new_state := 1,
+	                           actual_state := "Timer_DB".timers[#Timer_Nr].state); // do state change (Active -> Running)
+	    END_IF;
+END_FUNCTION
+
+FUNCTION "TimerReset" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      Timer_Nr : Int;
+   END_VAR
+
+
+BEGIN
+	    IF "Timer_DB".timers[#Timer_Nr].state <> 0 THEN
+	        "TimerStateChange"(new_state := 0,
+	                           actual_state := "Timer_DB".timers[#Timer_Nr].state); // do state change (Running|Held|Elapsed -> Active)
+	        "Timer_DB".timers[#Timer_Nr].cur_time := 0;
+	        "Timer_DB".timers[#Timer_Nr].time_elapsed := false;
+	    END_IF;
+END_FUNCTION
+
+FUNCTION "TimerCheck" : Int
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      Timer_Nr : Int;
+   END_VAR
+
+
+BEGIN
+	    // State 0 = Off
+	    // State 1 = Running
+	    // State 2 = Held
+	    // State 3 = Elapsed
+	    #TimerCheck := "Timer_DB".timers[#Timer_Nr].state;
+END_FUNCTION
+
+TYPE "typ_tuerverriegelungen"
+VERSION : 0.1
+   STRUCT
+      State : Array[0..1, 0..1] of Int;   // State Status
+      Bedientaster : Array[0..1, 0..1] of "typ_Bedienung_Tuer";   // Bedientaster
+      Meldeausgang : Array[0..1, 0..1] of Struct   // Meldeausgänge von Euchner Verriegelung
+         OD_Monitoring : Bool;   // Meldeausgang Türstellung. Griffmodul im Schalterkopf eingeführt
+         OL_Lock_active : Bool;   // Meldeausgang Zuhaltung. Bei aktiver Zuhaltung eingeschaltet.
+         OI_Diagnostic : Bool;   // Meldeausgang Diagnose. Im Fehlerfall eingeschaltet
+      END_STRUCT;
+      Tuer_Anf_activ : Array[0..1, 0..1] of Bool;   // Zustand der Tüanforderung Aktiv oder nicht
+      Anlageteil_gestoppt : Array[0..1, 0..1] of Bool;   // Freigabe von Extern. Anlage gestoppt
+      Zwangsoefnung { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Array[0..1, 0..1] of Bool;   // Q.Zwangsöffnung
+      ZwangsoefnungsVerz : Array[0..1, 0..1] of Int;   // Zeitverzoegerung für Zwangsöffnung
+      VerriegelungLOCK : Array[0..1, 0..1] of Bool;   // Q.Tür Verriegelung
+      SFDOOR_Q : Array[0..1, 0..1] of Bool;   // Türsicherheitsschalter geschlossen
+      ESTOP1_Q : Array[0..1, 0..1] of Bool;   // ESTOP1.Q Signal des Not-Aus
+      ESTOP_ACK_REQ : Array[0..1, 0..1] of Bool;   // Quittieranforderung des Not-Aus
+      LMTakt : Bool;   // Takt für Leuchtmelder
+   END_STRUCT;
+
+END_TYPE
+
+FUNCTION "TimerElapsed" : Bool
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      Timer_Nr : Int;
+   END_VAR
+
+
+BEGIN
+	    // State 0 = Active
+	    // State 1 = Running
+	    // State 2 = Held
+	    // State 3 = Elapsed
+	    #TimerElapsed := "Timer_DB".timers[#Timer_Nr].state = 3;
+END_FUNCTION
+
+DATA_BLOCK "N11_DB_EGS"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+   VAR 
+      Tuerverriegelung { S7_SetPoint := 'False'} : "typ_tuerverriegelungen";
+      Etagenband : Struct
+         Tipp_Vor : Array[1..22] of Bool;
+      END_STRUCT;
+      DIAG : Struct   // DiagnoseBytes von Schutzfunktionen
+         ESTOP1_NH_UEB : "type_DIAG_ESTOP1";   // Übergeordneter Not-Aus
+         SFDOOR_Klappe : "type_DIAG_SFDOOR";   // Not-Aus Sicherheitsschalter Klappe Eingriffschutz
+         ESTOP1_NH_BEL : "type_DIAG_ESTOP1";   // Not-Aus Schalter Belader
+         ESTOP1_NH_MP_BEL : "type_DIAG_ESTOP1";   // Not-Aus Schalter Mobil-Panel Belader 
+         ESTOP1_NH_AUF_BEL_HB_R : "type_DIAG_ESTOP1";   // Not-Aus Schalter Belader handbedienung auf Podest rechts
+         ESTOP1_NH_AUF_BEL_L : "type_DIAG_ESTOP1";   // Not-Aus Schalter Belader auf Podest links
+         ESTOP1_NH_BEL_AFS_1 : "type_DIAG_ESTOP1";   // Not-Aus Belader Auffahrsicherung 1
+         ESTOP1_NH_BEL_AFS_2 : "type_DIAG_ESTOP1";   // Not-Aus Belader Auffahrsicherung 2
+         ESTOP1_NH_BEL_AFS_3 : "type_DIAG_ESTOP1";   // Not-Aus Belader Auffahrsicherung 3
+         ESTOP1_NH_BEL_AFS_4 : "type_DIAG_ESTOP1";   // Not-Aus Belader Auffahrsicherung 4
+         ESTOP1_NH_BEL_AFS_5 : "type_DIAG_ESTOP1";   // Not-Aus Belader Auffahrsicherung 5
+         ESTOP1_NH_BEL_AFS_6 : "type_DIAG_ESTOP1";   // Not-Aus Belader Auffahrsicherung 6
+         ESTOP1_BEL_KRS_R1 : "type_DIAG_ESTOP1";   // Not-Aus Belader Kettenrisssicherung Rechts 1
+         ESTOP1_BEL_KRS_R2 : "type_DIAG_ESTOP1";   // Not-Aus Belader Kettenrisssicherung Rechts 2
+         ESTOP1_BEL_KRS_L1 : "type_DIAG_ESTOP1";   // Not-Aus Belader Kettenrisssicherung Links 1
+         ESTOP1_BEL_KRS_L2 : "type_DIAG_ESTOP1";   // Not-Aus Belader Kettenrisssicherung Links 2
+         ESTOP1_NH_ENT : "type_DIAG_ESTOP1";   // Not-Aus Schalter Entlader 
+         ESTOP1_NH_MP_ENT : "type_DIAG_ESTOP1";   // Not-Aus Schalter Mobil-panel Entlader 
+         ESTOP1_NH_AUF_ENT_HB_R : "type_DIAG_ESTOP1";   // Not-Aus Schalter Entlader handbedienung auf Podest rechts
+         ESTOP1_NH_AUF_ENT_L : "type_DIAG_ESTOP1";   // Not-Aus Schalter Entlader auf Podest links
+         ESTOP1_NH_ENT_AFS_1 : "type_DIAG_ESTOP1";   // Not-Aus Entlader Auffahrsicherung 1
+         ESTOP1_NH_ENT_AFS_2 : "type_DIAG_ESTOP1";   // Not-Aus Entlader Auffahrsicherung 2
+         ESTOP1_NH_ENT_AFS_3 : "type_DIAG_ESTOP1";   // Not-Aus Entlader Auffahrsicherung 3
+         ESTOP1_NH_ENT_AFS_4 : "type_DIAG_ESTOP1";   // Not-Aus Entlader Auffahrsicherung 4
+         ESTOP1_NH_ENT_AFS_5 : "type_DIAG_ESTOP1";   // Not-Aus Entlader Auffahrsicherung 5
+         ESTOP1_NH_ENT_AFS_6 : "type_DIAG_ESTOP1";   // Not-Aus Entlader Auffahrsicherung 6
+         ESTOP1_ENT_KRS_R1 : "type_DIAG_ESTOP1";   // Not-Aus Entlader Kettenrisssicherung Rechts 1
+         ESTOP1_ENT_KRS_R2 : "type_DIAG_ESTOP1";   // Not-Aus Entlader Kettenrisssicherung Rechts 2
+         ESTOP1_ENT_KRS_L1 : "type_DIAG_ESTOP1";   // Not-Aus Entlader Kettenrisssicherung Links 1
+         ESTOP1_ENT_KRS_L2 : "type_DIAG_ESTOP1";   // Not-Aus Entlader Kettenrisssicherung Links 2
+         ESTOP1_NH_VERR_BEL : "type_DIAG_ESTOP1";   // Not-Aus Belader Schalter Tür Verriegelung 
+         ESTOP1_NH_VERR_ENT : "type_DIAG_ESTOP1";   // Not-Aus Entlader Schalter Tür Verriegelung 
+         SFDOOR_BEL_R : "type_DIAG_SFDOOR";   // Sicherheitsschalter Türverriegelung Belader Rechts
+         SFDOOR_ENT_R : "type_DIAG_SFDOOR";   // Sicherheitsschalter Türverriegelung Entlader Rechts
+         ESTOP1_NH : "type_DIAG_ESTOP1";   // Bereichsnothalt gesammt EGS
+         FDBACK_NH_DELAY : "type_DIAG_FDBACK";   // Feedback Überwachung von Not-halt Schütz
+      END_STRUCT;
+      Meldungen : Struct
+         Only_in_Service : Bool;   // Diese Aktion ist nur in Servicebetrieb möglich
+         Gelender_not_Up : Bool;   // Fahren in Service nicht möglich weil Gelender nicht oben
+         Gelender_not_Down : Bool;   // Automatik Freigabe nicht möglich weil alle Geländer nicht unten
+         F_Band_non_exklusiv : Bool;   // Fehler: Mehr als ein Band Zustimmtaster betätigt. 
+      END_STRUCT;
+      PUT_GET : "typ_PUT_GET";
+   END_VAR
+
+
+BEGIN
+
+END_DATA_BLOCK
+
+FUNCTION "TimerTON" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      TimerNr : Int;
+      IN : Bool;
+   END_VAR
+
+   VAR_OUTPUT 
+      OUT : Bool;
+   END_VAR
+
+
+BEGIN
+	IF #IN AND NOT ("TimerCheck"(Timer_Nr := #TimerNr) <> 0) THEN
+	    "TimerReset"(Timer_Nr := #TimerNr);
+	    "TimerStart"(Timer_Nr := #TimerNr,
+	                 "Time" := "Timer_values_DB".timer_value[#TimerNr]);
+	ELSIF NOT #IN AND NOT ("TimerCheck"(Timer_Nr := #TimerNr) = 0) THEN
+	    "TimerReset"(Timer_Nr := #TimerNr);
+	END_IF;
+	#OUT := "TimerElapsed"(Timer_Nr := #TimerNr);
+	
+END_FUNCTION
+
+FUNCTION "fc_pulse" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      In_Var : Bool;   // Variable von der die Flanke gebildet wird 
+   END_VAR
+
+   VAR_IN_OUT 
+      type_fc_pulse_Var : "type_fc_pulse";
+   END_VAR
+
+
+BEGIN
+	//Bildung der positiven Flanke  //get the positive pulse
+	#type_fc_pulse_Var.Pulse_pos_Var := #In_Var AND NOT #type_fc_pulse_Var.Edge_flag_pos;
+	#type_fc_pulse_Var.Edge_flag_pos := #In_Var;
+	
+	//Bildung der negativen Flanke  //get the negative pulse
+	#type_fc_pulse_Var.Pulse_neg_Var := NOT #In_Var AND #type_fc_pulse_Var.Edge_flag_neg;
+	#type_fc_pulse_Var.Edge_flag_neg := #In_Var;
+END_FUNCTION
+
+FUNCTION "fc_StateChange" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      p_dst_state : Int;   // The desired destination state
+   END_VAR
+
+   VAR_IN_OUT 
+      p_state : Int;   // The desired destination state
+   END_VAR
+
+
+BEGIN
+	
+	// Diese Funktion führt eine Zustandsänderung für einen Zustandsautomaten durch.
+	// Sie ändert nur den Zustand, ohne irgendwelche
+	// Austritts- oder Eintrittsaktionen des alten oder neuen Zustands jeweils auszuführen.
+	// 
+	IF #p_state <> #p_dst_state THEN
+	    #p_state := #p_dst_state;
+	END_IF;
+	
+END_FUNCTION
+
+FUNCTION "fc_tuerverriegelungen" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      i_pos : Int;   // Position Index
+      i_side : Int;   // Side Index
+   END_VAR
+
+   VAR_IN_OUT 
+      Tuerverriegelung : "typ_tuerverriegelungen";
+   END_VAR
+
+
+BEGIN
+	REGION Türverriegelung
+	    REGION Info
+	(*    
+	    States:
+	    State 0 : Tür Anforderung Inaktiv
+	    State 1 : Tür Anforderung Aktiv
+	    State 2 : Tür entriegeln
+	    State 3 : Tür Verriegeln
+	    State 4 : Zwangsöffnung
+	    
+	    i_pos:
+	    1 : Belader
+	    2 : Entlader
+	    
+	    i_side:
+	    1 : Rechts
+	    2 : Links 
+	    
+	    Meldeausgänge der Verriegelung:
+	    OD_Monitoring = FALSE(Tür offen) , TRUE(tür geschlossen)
+	    OL_Lock_active = FALSE(Tür nicht zugehalten) , TRUE(tür geschlossen und Zugehalten)
+	    OI_Diagnostic = Fehler
+	    
+	*)
+	        
+	    END_REGION
+	    
+	    REGION Flanken Generieren
+	        "fc_pulse"(In_Var := "N11_DB_EGS".Tuerverriegelung.Bedientaster[#i_pos, #i_side].S_Anfordern,
+	                   type_fc_pulse_Var := "N11_DB_EGS".Tuerverriegelung.Bedientaster[#i_pos, #i_side].fc_pulse_S_Anfordern);
+	        "fc_pulse"(In_Var := "N11_DB_EGS".Tuerverriegelung.Bedientaster[#i_pos, #i_side].S_NA_Reset,
+	                   type_fc_pulse_Var := "N11_DB_EGS".Tuerverriegelung.Bedientaster[#i_pos, #i_side].fc_pulse_S_NA_Reset);
+	    END_REGION
+	    
+	    
+	    REGION Zwangsöffnung
+	        (*
+	        Eine ununterbrochene Betätigung des Tasters "Tür anfordern" für X Sekunden (Standard 5 Sekunden) führt zur Freigabe der Magnettürverriegelung.
+	        Diese Aktion hat keinen Einfluss auf die Sicherheit der Anlage.
+	        Beim Deaktivieren der Verriegelung wird der Türkontakt ausgelöst, was wiederum den NOT-Aus-Mechanismus aktiviert.
+	        Der Hauptzweck dieser Funktion ist die Unterstützung bei Service- oder Reparaturarbeiten, insbesondere wenn sich die Tür
+	            nicht automatisch auf herkömmlichem Wege entriegeln lässt.
+	        *)
+	        "TimerTON"(TimerNr := (#Tuerverriegelung.ZwangsoefnungsVerz[#i_pos, #i_side]),
+	                   IN := #Tuerverriegelung.Bedientaster[#i_pos, #i_side].S_Anfordern,
+	                   OUT => #Tuerverriegelung.Zwangsoefnung[#i_pos, #i_side]);
+	    END_REGION
+	    
+	    REGION States
+	        IF #Tuerverriegelung.State[#i_pos, #i_side] = 0 THEN  // State 0 : Tür Anforderung Inaktiv
+	            #Tuerverriegelung.Tuer_Anf_activ[#i_pos, #i_side] := FALSE;
+	            #Tuerverriegelung.VerriegelungLOCK[#i_pos, #i_side] := TRUE;
+	            #Tuerverriegelung.Bedientaster[#i_pos, #i_side].LM_Anfordern := FALSE;
+	            #Tuerverriegelung.Bedientaster[#i_pos, #i_side].LM_NA_Reset := FALSE;
+	            IF #Tuerverriegelung.Bedientaster[#i_pos, #i_side].fc_pulse_S_Anfordern.Pulse_neg_Var OR #Tuerverriegelung.Zwangsoefnung[#i_pos, #i_side] THEN
+	                "fc_StateChange"(p_dst_state := 1, // State 1 : Tür Anforderung Aktiv
+	                                 p_state := #Tuerverriegelung.State[#i_pos, #i_side]);
+	            END_IF;
+	        ELSIF #Tuerverriegelung.State[#i_pos, #i_side] = 1 THEN // State 1 : Tür Anforderung Aktiv
+	            #Tuerverriegelung.Tuer_Anf_activ[#i_pos, #i_side] := TRUE;
+	            #Tuerverriegelung.VerriegelungLOCK[#i_pos, #i_side] := TRUE;
+	            #Tuerverriegelung.Bedientaster[#i_pos, #i_side].LM_Anfordern := #Tuerverriegelung.LMTakt;
+	            #Tuerverriegelung.Bedientaster[#i_pos, #i_side].LM_NA_Reset := FALSE;
+	            IF #Tuerverriegelung.Anlageteil_gestoppt[#i_pos, #i_side] OR #Tuerverriegelung.Zwangsoefnung[#i_pos, #i_side] THEN
+	                "fc_StateChange"(p_dst_state := 2, // State 2 : Tür entriegeln
+	                                 p_state := #Tuerverriegelung.State[#i_pos, #i_side]);
+	            ELSIF #Tuerverriegelung.Bedientaster[#i_pos, #i_side].fc_pulse_S_Anfordern.Pulse_neg_Var THEN
+	                "fc_StateChange"(p_dst_state := 0, // State 0 : Tür Anforderung Inaktiv
+	                                 p_state := #Tuerverriegelung.State[#i_pos, #i_side]);
+	            END_IF;
+	        ELSIF #Tuerverriegelung.State[#i_pos, #i_side] = 2 THEN // State 2 : Tür entriegeln
+	            #Tuerverriegelung.Tuer_Anf_activ[#i_pos, #i_side] := TRUE;
+	            #Tuerverriegelung.VerriegelungLOCK[#i_pos, #i_side] := FALSE;
+	            #Tuerverriegelung.Bedientaster[#i_pos, #i_side].LM_Anfordern := TRUE;
+	            #Tuerverriegelung.Bedientaster[#i_pos, #i_side].LM_NA_Reset := #Tuerverriegelung.ESTOP_ACK_REQ[#i_pos, #i_side] AND #Tuerverriegelung.LMTakt;
+	            IF #Tuerverriegelung.Bedientaster[#i_pos, #i_side].fc_pulse_S_NA_Reset.Pulse_pos_Var AND
+	                #Tuerverriegelung.Meldeausgang[#i_pos, #i_side].OD_Monitoring AND
+	                #Tuerverriegelung.ESTOP_ACK_REQ[#i_pos, #i_side] THEN
+	                "fc_StateChange"(p_dst_state := 3, // State 3 : Tür Verriegeln
+	                                 p_state := #Tuerverriegelung.State[#i_pos, #i_side]);
+	            END_IF;
+	        ELSIF #Tuerverriegelung.State[#i_pos, #i_side] = 3 THEN  // State 3 : Tür Verriegeln
+	            #Tuerverriegelung.Tuer_Anf_activ[#i_pos, #i_side] := TRUE;
+	            #Tuerverriegelung.VerriegelungLOCK[#i_pos, #i_side] := TRUE;
+	            #Tuerverriegelung.Bedientaster[#i_pos, #i_side].LM_Anfordern := TRUE;
+	            #Tuerverriegelung.Bedientaster[#i_pos, #i_side].LM_NA_Reset := #Tuerverriegelung.ESTOP_ACK_REQ[#i_pos, #i_side] AND #Tuerverriegelung.LMTakt;
+	            IF #Tuerverriegelung.SFDOOR_Q[#i_pos, #i_side] AND
+	                #Tuerverriegelung.Meldeausgang[#i_pos, #i_side].OD_Monitoring AND
+	                #Tuerverriegelung.Meldeausgang[#i_pos, #i_side].OL_Lock_active THEN
+	                "fc_StateChange"(p_dst_state := 0, // State 0 : Tür Anforderung Inaktiv
+	                                 p_state := #Tuerverriegelung.State[#i_pos, #i_side]);
+	            ELSIF #Tuerverriegelung.Zwangsoefnung[#i_pos, #i_side] THEN
+	                "fc_StateChange"(p_dst_state := 1, // State 1 : Tür Anforderung Aktiv
+	                                 p_state := #Tuerverriegelung.State[#i_pos, #i_side]);
+	            END_IF;
+	        END_IF;
+	    END_REGION
+	
+	END_REGION
+	
+	
+	
+END_FUNCTION
+

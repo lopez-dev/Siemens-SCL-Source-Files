@@ -1,0 +1,287 @@
+TYPE "typ_Timers_UDT"
+VERSION : 0.1
+   STRUCT
+      state : Int;   // current state of the timer
+      init_time : Int;   // initial time for the timer in 100ms
+      cur_time : Int;   // currently elapsed time for this timer
+      time_elapsed : Bool;   // true: timer has completed / false: timer is running or stopped
+   END_STRUCT;
+
+END_TYPE
+
+DATA_BLOCK "Timer_DB"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+   VAR 
+      interrupt_set : Bool;   // Interrupt of cyclib OB
+      update_counter : Int;   // Counter for cyclic updates
+      timers { S7_SetPoint := 'False'} : Array[0..600] of "typ_Timers_UDT";   //  This is the data structure for stateful timers. It can be used in a DB that holds this structure in an array. The index of the array will be the timer array. The following states are defined: 0: Off 1: Running 2: Held 3: Elapsed
+   END_VAR
+
+
+BEGIN
+
+END_DATA_BLOCK
+
+FUNCTION "TimerStateChange" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      new_state : Int;
+   END_VAR
+
+   VAR_IN_OUT 
+      actual_state : Int;
+   END_VAR
+
+
+BEGIN
+	    IF #actual_state <> #new_state THEN
+	        #actual_state := #new_state;
+	    END_IF;
+END_FUNCTION
+
+FUNCTION "TimerCheck" : Int
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      Timer_Nr : Int;
+   END_VAR
+
+
+BEGIN
+	    // State 0 = Off
+	    // State 1 = Running
+	    // State 2 = Held
+	    // State 3 = Elapsed
+	    #TimerCheck := "Timer_DB".timers[#Timer_Nr].state;
+END_FUNCTION
+
+FUNCTION "TimerReset" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      Timer_Nr : Int;
+   END_VAR
+
+
+BEGIN
+	    IF "Timer_DB".timers[#Timer_Nr].state <> 0 THEN
+	        "TimerStateChange"(new_state := 0,
+	                           actual_state := "Timer_DB".timers[#Timer_Nr].state); // do state change (Running|Held|Elapsed -> Active)
+	        "Timer_DB".timers[#Timer_Nr].cur_time := 0;
+	        "Timer_DB".timers[#Timer_Nr].time_elapsed := false;
+	    END_IF;
+END_FUNCTION
+
+FUNCTION "TimerStart" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      Timer_Nr : Int;
+      "Time" : Int;   // Time in Sec * 10
+   END_VAR
+
+
+BEGIN
+	    IF "Timer_DB".timers[#Timer_Nr].state = 0 THEN
+	        "Timer_DB".timers[#Timer_Nr].init_time := #Time;
+	        "TimerStateChange"(new_state := 1,
+	                           actual_state := "Timer_DB".timers[#Timer_Nr].state); // do state change (Active -> Running)
+	    END_IF;
+END_FUNCTION
+
+FUNCTION "TimerElapsed" : Bool
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      Timer_Nr : Int;
+   END_VAR
+
+
+BEGIN
+	    // State 0 = Active
+	    // State 1 = Running
+	    // State 2 = Held
+	    // State 3 = Elapsed
+	    #TimerElapsed := "Timer_DB".timers[#Timer_Nr].state = 3;
+END_FUNCTION
+
+DATA_BLOCK "Timer_values_DB"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+NON_RETAIN
+   VAR 
+      timer_value { S7_SetPoint := 'True'} : Array[0..600] of Int;
+   END_VAR
+
+
+BEGIN
+   timer_value[0] := 100;
+   timer_value[10] := 30;
+   timer_value[11] := 50;
+
+END_DATA_BLOCK
+
+FUNCTION "TimerTON" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      TimerNr : Int;
+      IN : Bool;
+   END_VAR
+
+   VAR_OUTPUT 
+      OUT : Bool;
+   END_VAR
+
+
+BEGIN
+	IF #IN AND NOT ("TimerCheck"(Timer_Nr := #TimerNr) = 1) THEN
+	    "TimerReset"(Timer_Nr := #TimerNr);
+	    "TimerStart"(Timer_Nr := #TimerNr,
+	                 "Time" := "Timer_values_DB".timer_value[#TimerNr]);
+	ELSIF NOT #IN AND NOT ("TimerCheck"(Timer_Nr := #TimerNr) = 0) THEN
+	    "TimerReset"(Timer_Nr := #TimerNr);
+	END_IF;
+	#OUT := "TimerElapsed"(Timer_Nr := #TimerNr);
+	
+END_FUNCTION
+
+FUNCTION "TimerHold" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      Timer_nr : Int;
+   END_VAR
+
+
+BEGIN
+	    IF "Timer_DB".timers[#Timer_nr].state = 1 THEN
+	        "TimerStateChange"(new_state := 2,
+	                             actual_state := "Timer_DB".timers[#Timer_nr].state); // do state change (Running -> Held)
+	    END_IF;
+END_FUNCTION
+
+FUNCTION "TimerResume" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      Timer_nr : Int;
+   END_VAR
+
+
+BEGIN
+	    IF "Timer_DB".timers[#Timer_nr].state = 2 THEN
+	        "TimerStateChange"(new_state := 1,
+	                           actual_state := "Timer_DB".timers[#Timer_nr].state); // do state change (Held -> Running)
+	    END_IF;
+END_FUNCTION
+
+FUNCTION "TimerManager" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_TEMP 
+      index : Int;
+      countPerCycle : Int;
+      cycleTime : Int;
+   END_VAR
+
+
+BEGIN
+	// init
+	#countPerCycle := 60;
+	#cycleTime := 1;
+	
+	FOR #index := ("Timer_DB".update_counter * #countPerCycle) TO ("Timer_DB".update_counter * #countPerCycle + (#countPerCycle - 1)) DO
+	    IF "Timer_DB".timers[#index].state = 1 THEN // time is Running
+	        IF "Timer_DB".timers[#index].cur_time >= "Timer_DB".timers[#index].init_time THEN
+	            "TimerStateChange"(new_state := 3,
+	                                actual_state := "Timer_DB".timers[#index].state); // do state change (Running -> Elapsed)
+	            "Timer_DB".timers[#index].time_elapsed := true;
+	        END_IF;
+	        "Timer_DB".timers[#index].cur_time := ("Timer_DB".timers[#index].cur_time + #cycleTime * 10);
+	    END_IF;
+	END_FOR;
+	
+	IF "Timer_DB".update_counter >= 9 THEN // Prepared for 600 timers
+	    "Timer_DB".update_counter := 0;
+	ELSE
+	    "Timer_DB".update_counter := "Timer_DB".update_counter + 1;
+	END_IF;
+END_FUNCTION
+
+FUNCTION "TimerReadme" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+
+BEGIN
+	REGION Deutsch
+	(*
+	************************************************
+	#################################################
+	################# Disclaimer ####################
+	Der Cyclic interrupt OB muss manuell erstellt werden.
+	Vergessen Sie nicht, die Interrupt-Zeit 10000 mikrosekunden festzulegen und
+	TimerManager im Cyclic interrupt OB aufzurufen.
+	#################################################
+	#################################################
+	*************************************************
+	
+	Zustände:
+	Zustand 0 = Aus
+	Zustand 1 = Laufend
+	Zustand 2 = Halten
+	Zustand 3 = Abgelaufen
+	
+	Funktionen:
+	TimerCheck:     Gibt den aktuellen Zustand des Timers zurück
+	
+	TimerReset:     Setzt den Zustand auf 0 und die Standardwerte zurück
+	
+	TimerStart:     Setzt den Zustand auf 1 und startet den Timer mit der Initialzeit
+	
+	TimerHold:      Setzt den Zustand auf 2 und hält den Timer an
+	
+	TimerResume:    Setzt den Zustand erneut auf 1 und fährt den Timer fort
+	
+	TimerManager:   Zählt die Zeit der Timer hoch und setzt den Zustand auf 3, wenn sie abgelaufen sind
+	*)
+	END_REGION
+	
+	REGION English
+	 (* ENGLISH
+	************************************************
+	#################################################
+	################# Disclaimer ####################
+	The cyclic interrupt OB must be created manually.
+	Don't forget to set the interrupt time to 10000 microseconds and
+	call TimerManager in the cyclic interrupt OB.
+	#################################################
+	#################################################
+	*************************************************
+	
+	States:
+	    State 0 = Off
+	    State 1 = Running
+	    State 2 = Hold
+	    State 3 = Elapsed
+	    
+	Functions:
+	    TimerCheck:     Returns the current state of the timer
+	    
+	    TimerReset:     Changes the state to 0 and sets default values
+	    
+	    TimerStart:     Changes the state to 1 and starts the timer with the initial time
+	    
+	    TimerHold:      Changes the state to 2 and holds the timer
+	    
+	    TimerResume:    Changes the state back to 1 and resumes the timer
+	    
+	    TimerManager:   Counts up the time of the timers and changes the state to 3 when they are elapsed
+	*)
+	END_REGION
+	
+END_FUNCTION
+

@@ -1,0 +1,115 @@
+FUNCTION_BLOCK "fb_PSE200U"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+VAR_INPUT 
+    S : Bool;   // Status signal from PSE200U
+END_VAR
+
+VAR_OUTPUT 
+    CH1 : Bool;   // Channel 1 OK
+    CH2 : Bool;   // Channel 2 OK
+    CH3 : Bool;   // Channel 3 OK
+    CH4 : Bool;   // Channel 4 OK
+    error : Bool;   // PSE200U Error
+    status : Int;   // PSE200U Status
+END_VAR
+
+VAR 
+    "TIME" {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;   // Mein Timer
+    CHECK {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;   // Check TImer
+    ERROR_TON {InstructionName := 'TON_TIME'; LibVersion := '1.0'} : TON_TIME;   // Error Timer
+    state { S7_SetPoint := 'True'} : Int;   // State of sequence
+    StepStatus : Array[0..9] of Bool;   // Status of Steps
+    ChannelStatus : Array[1..4] of Bool;   // Status of output channels
+    saved_state : Int;   // Mem the state for the next cycle
+END_VAR
+
+VAR_TEMP 
+    i : Int;   // index number
+    status_tmp : Int;   // PSE200U status
+END_VAR
+
+VAR CONSTANT 
+    StartTimeTrig : Time := T#500MS;   // Time to start the sequence
+    deviation : Time := T#10MS;   // deviation time
+    MaxTime : Time := T#2S_750MS;   // Max time of sequence
+    T_Interval : Time := T#250MS;   // Pause and channel interval
+END_VAR
+
+
+BEGIN
+    REGION Start main Timer
+        #TIME(IN := #state > 0,
+            PT := #MaxTime); // Timer for sequence execution
+    END_REGION
+    
+    REGION Check Sequence
+        CASE #state OF
+            0: // Initialization: Reset all step statuses
+                #CHECK(IN := #S,
+                    PT := #StartTimeTrig - #deviation);
+                IF #CHECK.Q THEN
+                    #StepStatus[#state] := TRUE;
+                    #state := 1; // Move to the next state
+                END_IF;
+                
+            1..9: // Handle both pauses (odd states) and channel checks (even states)
+                #CHECK(IN := (#state MOD 2 = 1) XOR #S,
+                    PT := #T_Interval - #deviation); // Toggle input based on state (pause vs channel)
+                IF #TIME.ET > (#T_Interval * #state) THEN
+                    #StepStatus[#state] := #CHECK.Q;
+                    IF #state MOD 2 = 0 THEN // Even states are channels, update channel status
+                        #ChannelStatus[#state / 2] := #CHECK.Q;
+                    END_IF;
+                    #state := #state + 1; // Move to the next state
+                END_IF;
+                
+            10: // Sequence completed, check for errors and reset state
+                // Check if all steps were successful
+                #state := 0; // Reset state for the next cycle
+        END_CASE;
+    END_REGION
+    
+    REGION error handling
+    (* Define error status: 
+    0 = no error, 
+    1 = channel error, 
+    2 = pause error, 
+    3 = no sequence started,
+    4 = sequence stopped
+    *)
+        #ERROR_TON(IN := #state = #saved_state,
+                PT := #MaxTime); // Timeout check
+        
+        IF #state = 0 AND #ERROR_TON.ET > #StartTimeTrig + #deviation THEN
+            #status_tmp := 3; // No sequence started
+        ELSIF #state > 0 AND #ERROR_TON.ET > #StartTimeTrig * 4 + #deviation THEN
+            #status_tmp := 4; // Sequence stopped
+        ELSE
+            FOR #i := 1 TO 9 DO
+                IF NOT #StepStatus[#i] THEN
+                    IF #i MOD 2 = 0 THEN
+                        #status_tmp := 1;
+                    ELSE
+                        #status_tmp := 2;
+                        ; // Set channel or pause error
+                    END_IF;
+                END_IF;
+            END_FOR;
+        END_IF;
+        
+        #saved_state := #state; // Save current state
+    END_REGION
+    
+    REGION Assign outputs
+        // Assign channel statuses to outputs
+        #CH1 := #ChannelStatus[1];
+        #CH2 := #ChannelStatus[2];
+        #CH3 := #ChannelStatus[3];
+        #CH4 := #ChannelStatus[4];
+        
+        #error := (#status_tmp <> 0); // Set error flag if there is any error
+        #status := #status_tmp; // Output current error status
+    END_REGION
+END_FUNCTION_BLOCK
+

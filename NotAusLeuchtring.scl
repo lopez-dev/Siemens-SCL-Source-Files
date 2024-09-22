@@ -1,0 +1,21 @@
+FUNCTION "NotAusLeuchtring" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      NA_Input : Bool;
+      Interval : Bool;
+   END_VAR
+
+   VAR_OUTPUT 
+      Lamp : Bool;
+   END_VAR
+
+
+BEGIN
+	    IF #NA_Input THEN
+	        #Lamp := TRUE;
+	    ELSE
+	        #Lamp := #Interval;
+	    END_IF;
+END_FUNCTION
+
