@@ -1,19 +1,19 @@
 FUNCTION "fc_pulse" : Void
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
-   VAR_INPUT 
-      In_Var : Bool;   // Variable von der die Flanke gebildet wird 
-   END_VAR
+VAR_INPUT 
+	In_Var : Bool;   // Variable von der die Flanke gebildet wird 
+END_VAR
 
-   VAR_OUTPUT 
-      Pulse_pos_Var : Bool;   // Ausgangsvariable der positiven Flanke   
-      Pulse_neg_Var : Bool;   // Ausgangsvariable der negativen Flanke  
-   END_VAR
+VAR_OUTPUT 
+	Pulse_pos_Var : Bool;   // Ausgangsvariable der positiven Flanke   
+	Pulse_neg_Var : Bool;   // Ausgangsvariable der negativen Flanke  
+END_VAR
 
-   VAR_IN_OUT 
-      Edge_flag_pos : Bool;   // Flankenmerker der pos. Flanke. Übergabe im Aufruf
-      Edge_flag_neg : Bool;   // Flankenmerker der neg. Flanke. Übergabe im Aufruf
-   END_VAR
+VAR_IN_OUT 
+	Edge_flag_pos : Bool;   // Flankenmerker der pos. Flanke. Übergabe im Aufruf
+	Edge_flag_neg : Bool;   // Flankenmerker der neg. Flanke. Übergabe im Aufruf
+END_VAR
 
 
 BEGIN
@@ -28,190 +28,190 @@ END_FUNCTION
 
 TYPE "typ_Meld_HMI"
 VERSION : 0.1
-   STRUCT
-      ACK : Bool;   // Meldung quittieren
-      Alarm : Bool;   // Anzeige Alarmmeldung
-      Warn : Bool;   // Anzeige Warnmeldung
-      Meld_Quitt : Array[0..19] of Word;   // [0..9] = Alarmmeldungen / [10..19] = Quittierung Alarmmeldung von PLC
-      Warnungen : Array[0..1] of Word := [2(16#0000)];   // Warnungen
-   END_STRUCT;
+STRUCT
+	ACK : Bool;   // Meldung quittieren
+	Alarm : Bool;   // Anzeige Alarmmeldung
+	Warn : Bool;   // Anzeige Warnmeldung
+	Meld_Quitt : Array[0..19] of Word;   // [0..9] = Alarmmeldungen / [10..19] = Quittierung Alarmmeldung von PLC
+	Warnungen : Array[0..1] of Word := [2(16#0000)];   // Warnungen
+END_STRUCT;
 
 END_TYPE
 
 TYPE "typ_Meld"
 VERSION : 0.1
-   STRUCT
-      NewError : Bool;   // new alarm
-      Error : Bool;   // summary alarm
-      Reset : Bool;   // reset -> PLC
-      State : Byte;   // 0= no Error, 16#1= Error, 16#2= New Error, 16#80= Array size is not just number, 16#81= unknown datatype
-      index { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Int;   // index nr of alarm word
-      indexMax { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Int;   // Max. index nr of alarm word
-   END_STRUCT;
+STRUCT
+	NewError : Bool;   // new alarm
+	Error : Bool;   // summary alarm
+	Reset : Bool;   // reset -> PLC
+	State : Byte;   // 0= no Error, 16#1= Error, 16#2= New Error, 16#80= Array size is not just number, 16#81= unknown datatype
+	index { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Int;   // index nr of alarm word
+	indexMax { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Int;   // Max. index nr of alarm word
+END_STRUCT;
 
 END_TYPE
 
 FUNCTION_BLOCK "fb_alarming"
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
-   VAR_INPUT 
-      reset : Bool;
-   END_VAR
+VAR_INPUT 
+	reset : Bool;
+END_VAR
 
-   VAR_OUTPUT 
-      error : Bool;
-      new_error : Bool;
-      state : Byte;
-   END_VAR
+VAR_OUTPUT 
+	error : Bool;
+	new_error : Bool;
+	state : Byte;
+END_VAR
 
-   VAR_IN_OUT 
-      Meldungen : Array[0..7] of Word;
-   END_VAR
+VAR_IN_OUT 
+	Meldungen : Array[0..7] of Word;
+END_VAR
 
-   VAR 
-      MeldeSnapshot : Array[0..7] of Word;
-      reset_puls_pos { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;
-   END_VAR
-   VAR RETAIN
-      st_error : Bool;
-      st_new_error : Bool;
-   END_VAR
-   VAR 
-      R_TRIG_Instance0 {InstructionName := 'R_TRIG'; LibVersion := '1.0'} : R_TRIG;
-      R_TRIG_Instance {InstructionName := 'R_TRIG'; LibVersion := '1.0'} : Array[0..15] of R_TRIG;
-      F_TRIG_Instance {InstructionName := 'F_TRIG'; LibVersion := '1.0'} : Array[0..15] of F_TRIG;
-   END_VAR
+VAR 
+	MeldeSnapshot : Array[0..7] of Word;
+	reset_puls_pos { ExternalAccessible := 'False'; ExternalVisible := 'False'; ExternalWritable := 'False'} : Bool;
+END_VAR
+VAR RETAIN
+	st_error : Bool;
+	st_new_error : Bool;
+END_VAR
+VAR 
+	R_TRIG_Instance0 {InstructionName := 'R_TRIG'; LibVersion := '1.0'} : R_TRIG;
+	R_TRIG_Instance {InstructionName := 'R_TRIG'; LibVersion := '1.0'} : Array[0..15] of R_TRIG;
+	F_TRIG_Instance {InstructionName := 'F_TRIG'; LibVersion := '1.0'} : Array[0..15] of F_TRIG;
+END_VAR
 
-   VAR_TEMP 
-      dummy : Bool;
-      i : Int;
-   END_VAR
+VAR_TEMP 
+	dummy : Bool;
+	i : Int;
+END_VAR
 
 
 BEGIN
 	
 	REGION #error
-	    IF (#Meldungen[0] OR
-	        #Meldungen[1] OR
-	        #Meldungen[2] OR
-	        #Meldungen[3] OR
-	        #Meldungen[4] OR
-	        #Meldungen[5] OR
-	        #Meldungen[6] OR
-	        #Meldungen[7]) <> 0
-	    THEN
-	        #st_error := TRUE;
-	    ELSE
-	        #st_error := FALSE;
-	    END_IF;
+		IF (#Meldungen[0] OR
+			#Meldungen[1] OR
+			#Meldungen[2] OR
+			#Meldungen[3] OR
+			#Meldungen[4] OR
+			#Meldungen[5] OR
+			#Meldungen[6] OR
+			#Meldungen[7]) <> 0
+		THEN
+			#st_error := TRUE;
+		ELSE
+			#st_error := FALSE;
+		END_IF;
 	END_REGION
 	
 	REGION reset pulse
-	    "fc_pulse"(In_Var := #reset,
-	               Pulse_pos_Var => #reset_puls_pos,
-	               Pulse_neg_Var => #dummy,
-	               Edge_flag_pos := #dummy,
-	               Edge_flag_neg := #dummy);
+		"fc_pulse"(In_Var := #reset,
+				Pulse_pos_Var => #reset_puls_pos,
+				Pulse_neg_Var => #dummy,
+				Edge_flag_pos := #dummy,
+				Edge_flag_neg := #dummy);
 	END_REGION
 	
 	
 	
 	REGION reset
-	    IF #reset_puls_pos THEN
-	        #MeldeSnapshot := #Meldungen;
-	        #st_new_error := FALSE;
-	    END_IF;
+		IF #reset_puls_pos THEN
+			#MeldeSnapshot := #Meldungen;
+			#st_new_error := FALSE;
+		END_IF;
 	END_REGION
 	
 	
 	REGION Schleife für erkennung von neue Fehler
-	    FOR #i := 0 TO 7 DO
-	        IF #Meldungen[#i].%X0 = 1 AND #MeldeSnapshot[#i].%X0 = 0 THEN
-	            #st_new_error := TRUE;
-	        ELSIF #Meldungen[#i].%X0 = 0 AND #MeldeSnapshot[#i].%X0 = 1 THEN
-	            #MeldeSnapshot[#i].%X0 := #Meldungen[#i].%X0;
-	        ELSIF #Meldungen[#i].%X1 = 1 AND #MeldeSnapshot[#i].%X1 = 0 THEN
-	            #st_new_error := TRUE;
-	        ELSIF #Meldungen[#i].%X1 = 0 AND #MeldeSnapshot[#i].%X1 = 1 THEN
-	            #MeldeSnapshot[#i].%X1 := #Meldungen[#i].%X1;
-	        ELSIF #Meldungen[#i].%X2 = 1 AND #MeldeSnapshot[#i].%X2 = 0 THEN
-	            #st_new_error := TRUE;
-	        ELSIF #Meldungen[#i].%X2 = 0 AND #MeldeSnapshot[#i].%X2 = 1 THEN
-	            #MeldeSnapshot[#i].%X2 := #Meldungen[#i].%X2;
-	        ELSIF #Meldungen[#i].%X3 = 1 AND #MeldeSnapshot[#i].%X3 = 0 THEN
-	            #st_new_error := TRUE;
-	        ELSIF #Meldungen[#i].%X3 = 0 AND #MeldeSnapshot[#i].%X3 = 1 THEN
-	            #MeldeSnapshot[#i].%X3 := #Meldungen[#i].%X3;
-	        ELSIF #Meldungen[#i].%X4 = 1 AND #MeldeSnapshot[#i].%X4 = 0 THEN
-	            #st_new_error := TRUE;
-	        ELSIF #Meldungen[#i].%X4 = 0 AND #MeldeSnapshot[#i].%X4 = 1 THEN
-	            #MeldeSnapshot[#i].%X4 := #Meldungen[#i].%X4;
-	        ELSIF #Meldungen[#i].%X5 = 1 AND #MeldeSnapshot[#i].%X5 = 0 THEN
-	            #st_new_error := TRUE;
-	        ELSIF #Meldungen[#i].%X5 = 0 AND #MeldeSnapshot[#i].%X5 = 1 THEN
-	            #MeldeSnapshot[#i].%X5 := #Meldungen[#i].%X5;
-	        ELSIF #Meldungen[#i].%X6 = 1 AND #MeldeSnapshot[#i].%X6 = 0 THEN
-	            #st_new_error := TRUE;
-	        ELSIF #Meldungen[#i].%X6 = 0 AND #MeldeSnapshot[#i].%X6 = 1 THEN
-	            #MeldeSnapshot[#i].%X6 := #Meldungen[#i].%X6;
-	        ELSIF #Meldungen[#i].%X7 = 1 AND #MeldeSnapshot[#i].%X7 = 0 THEN
-	            #st_new_error := TRUE;
-	        ELSIF #Meldungen[#i].%X7 = 0 AND #MeldeSnapshot[#i].%X7 = 1 THEN
-	            #MeldeSnapshot[#i].%X7 := #Meldungen[#i].%X7;
-	        ELSIF #Meldungen[#i].%X8 = 1 AND #MeldeSnapshot[#i].%X8 = 0 THEN
-	            #st_new_error := TRUE;
-	        ELSIF #Meldungen[#i].%X8 = 0 AND #MeldeSnapshot[#i].%X8 = 1 THEN
-	            #MeldeSnapshot[#i].%X8 := #Meldungen[#i].%X8;
-	        ELSIF #Meldungen[#i].%X9 = 1 AND #MeldeSnapshot[#i].%X9 = 0 THEN
-	            #st_new_error := TRUE;
-	        ELSIF #Meldungen[#i].%X9 = 0 AND #MeldeSnapshot[#i].%X9 = 1 THEN
-	            #MeldeSnapshot[#i].%X9 := #Meldungen[#i].%X9;
-	        ELSIF #Meldungen[#i].%X10 = 1 AND #MeldeSnapshot[#i].%X10 = 0 THEN
-	            #st_new_error := TRUE;
-	        ELSIF #Meldungen[#i].%X10 = 0 AND #MeldeSnapshot[#i].%X10 = 1 THEN
-	            #MeldeSnapshot[#i].%X10 := #Meldungen[#i].%X10;
-	        ELSIF #Meldungen[#i].%X11 = 1 AND #MeldeSnapshot[#i].%X11 = 0 THEN
-	            #st_new_error := TRUE;
-	        ELSIF #Meldungen[#i].%X11 = 0 AND #MeldeSnapshot[#i].%X11 = 1 THEN
-	            #MeldeSnapshot[#i].%X11 := #Meldungen[#i].%X11;
-	        ELSIF #Meldungen[#i].%X12 = 1 AND #MeldeSnapshot[#i].%X12 = 0 THEN
-	            #st_new_error := TRUE;
-	        ELSIF #Meldungen[#i].%X12 = 0 AND #MeldeSnapshot[#i].%X12 = 1 THEN
-	            #MeldeSnapshot[#i].%X12 := #Meldungen[#i].%X12;
-	        ELSIF #Meldungen[#i].%X13 = 1 AND #MeldeSnapshot[#i].%X13 = 0 THEN
-	            #st_new_error := TRUE;
-	        ELSIF #Meldungen[#i].%X13 = 0 AND #MeldeSnapshot[#i].%X13 = 1 THEN
-	            #MeldeSnapshot[#i].%X13 := #Meldungen[#i].%X13;
-	        ELSIF #Meldungen[#i].%X14 = 1 AND #MeldeSnapshot[#i].%X14 = 0 THEN
-	            #st_new_error := TRUE;
-	        ELSIF #Meldungen[#i].%X14 = 0 AND #MeldeSnapshot[#i].%X14 = 1 THEN
-	            #MeldeSnapshot[#i].%X14 := #Meldungen[#i].%X14;
-	        ELSIF #Meldungen[#i].%X15 = 1 AND #MeldeSnapshot[#i].%X15 = 0 THEN
-	            #st_new_error := TRUE;
-	        ELSIF #Meldungen[#i].%X15 = 0 AND #MeldeSnapshot[#i].%X15 = 1 THEN
-	            #MeldeSnapshot[#i].%X15 := #Meldungen[#i].%X15;
-	        END_IF;
-	    END_FOR;
+		FOR #i := 0 TO 7 DO
+			IF #Meldungen[#i].%X0 = 1 AND #MeldeSnapshot[#i].%X0 = 0 THEN
+				#st_new_error := TRUE;
+			ELSIF #Meldungen[#i].%X0 = 0 AND #MeldeSnapshot[#i].%X0 = 1 THEN
+				#MeldeSnapshot[#i].%X0 := #Meldungen[#i].%X0;
+			ELSIF #Meldungen[#i].%X1 = 1 AND #MeldeSnapshot[#i].%X1 = 0 THEN
+				#st_new_error := TRUE;
+			ELSIF #Meldungen[#i].%X1 = 0 AND #MeldeSnapshot[#i].%X1 = 1 THEN
+				#MeldeSnapshot[#i].%X1 := #Meldungen[#i].%X1;
+			ELSIF #Meldungen[#i].%X2 = 1 AND #MeldeSnapshot[#i].%X2 = 0 THEN
+				#st_new_error := TRUE;
+			ELSIF #Meldungen[#i].%X2 = 0 AND #MeldeSnapshot[#i].%X2 = 1 THEN
+				#MeldeSnapshot[#i].%X2 := #Meldungen[#i].%X2;
+			ELSIF #Meldungen[#i].%X3 = 1 AND #MeldeSnapshot[#i].%X3 = 0 THEN
+				#st_new_error := TRUE;
+			ELSIF #Meldungen[#i].%X3 = 0 AND #MeldeSnapshot[#i].%X3 = 1 THEN
+				#MeldeSnapshot[#i].%X3 := #Meldungen[#i].%X3;
+			ELSIF #Meldungen[#i].%X4 = 1 AND #MeldeSnapshot[#i].%X4 = 0 THEN
+				#st_new_error := TRUE;
+			ELSIF #Meldungen[#i].%X4 = 0 AND #MeldeSnapshot[#i].%X4 = 1 THEN
+				#MeldeSnapshot[#i].%X4 := #Meldungen[#i].%X4;
+			ELSIF #Meldungen[#i].%X5 = 1 AND #MeldeSnapshot[#i].%X5 = 0 THEN
+				#st_new_error := TRUE;
+			ELSIF #Meldungen[#i].%X5 = 0 AND #MeldeSnapshot[#i].%X5 = 1 THEN
+				#MeldeSnapshot[#i].%X5 := #Meldungen[#i].%X5;
+			ELSIF #Meldungen[#i].%X6 = 1 AND #MeldeSnapshot[#i].%X6 = 0 THEN
+				#st_new_error := TRUE;
+			ELSIF #Meldungen[#i].%X6 = 0 AND #MeldeSnapshot[#i].%X6 = 1 THEN
+				#MeldeSnapshot[#i].%X6 := #Meldungen[#i].%X6;
+			ELSIF #Meldungen[#i].%X7 = 1 AND #MeldeSnapshot[#i].%X7 = 0 THEN
+				#st_new_error := TRUE;
+			ELSIF #Meldungen[#i].%X7 = 0 AND #MeldeSnapshot[#i].%X7 = 1 THEN
+				#MeldeSnapshot[#i].%X7 := #Meldungen[#i].%X7;
+			ELSIF #Meldungen[#i].%X8 = 1 AND #MeldeSnapshot[#i].%X8 = 0 THEN
+				#st_new_error := TRUE;
+			ELSIF #Meldungen[#i].%X8 = 0 AND #MeldeSnapshot[#i].%X8 = 1 THEN
+				#MeldeSnapshot[#i].%X8 := #Meldungen[#i].%X8;
+			ELSIF #Meldungen[#i].%X9 = 1 AND #MeldeSnapshot[#i].%X9 = 0 THEN
+				#st_new_error := TRUE;
+			ELSIF #Meldungen[#i].%X9 = 0 AND #MeldeSnapshot[#i].%X9 = 1 THEN
+				#MeldeSnapshot[#i].%X9 := #Meldungen[#i].%X9;
+			ELSIF #Meldungen[#i].%X10 = 1 AND #MeldeSnapshot[#i].%X10 = 0 THEN
+				#st_new_error := TRUE;
+			ELSIF #Meldungen[#i].%X10 = 0 AND #MeldeSnapshot[#i].%X10 = 1 THEN
+				#MeldeSnapshot[#i].%X10 := #Meldungen[#i].%X10;
+			ELSIF #Meldungen[#i].%X11 = 1 AND #MeldeSnapshot[#i].%X11 = 0 THEN
+				#st_new_error := TRUE;
+			ELSIF #Meldungen[#i].%X11 = 0 AND #MeldeSnapshot[#i].%X11 = 1 THEN
+				#MeldeSnapshot[#i].%X11 := #Meldungen[#i].%X11;
+			ELSIF #Meldungen[#i].%X12 = 1 AND #MeldeSnapshot[#i].%X12 = 0 THEN
+				#st_new_error := TRUE;
+			ELSIF #Meldungen[#i].%X12 = 0 AND #MeldeSnapshot[#i].%X12 = 1 THEN
+				#MeldeSnapshot[#i].%X12 := #Meldungen[#i].%X12;
+			ELSIF #Meldungen[#i].%X13 = 1 AND #MeldeSnapshot[#i].%X13 = 0 THEN
+				#st_new_error := TRUE;
+			ELSIF #Meldungen[#i].%X13 = 0 AND #MeldeSnapshot[#i].%X13 = 1 THEN
+				#MeldeSnapshot[#i].%X13 := #Meldungen[#i].%X13;
+			ELSIF #Meldungen[#i].%X14 = 1 AND #MeldeSnapshot[#i].%X14 = 0 THEN
+				#st_new_error := TRUE;
+			ELSIF #Meldungen[#i].%X14 = 0 AND #MeldeSnapshot[#i].%X14 = 1 THEN
+				#MeldeSnapshot[#i].%X14 := #Meldungen[#i].%X14;
+			ELSIF #Meldungen[#i].%X15 = 1 AND #MeldeSnapshot[#i].%X15 = 0 THEN
+				#st_new_error := TRUE;
+			ELSIF #Meldungen[#i].%X15 = 0 AND #MeldeSnapshot[#i].%X15 = 1 THEN
+				#MeldeSnapshot[#i].%X15 := #Meldungen[#i].%X15;
+			END_IF;
+		END_FOR;
 	END_REGION
 	
 	
 	REGION state
-	    IF NOT #st_error AND NOT #new_error THEN
-	        #state := 0; //no error
-	    ELSIF #st_error AND NOT #st_new_error THEN
-	        #state := 1; //error
-	    ELSIF #error AND #st_new_error THEN
-	        #state := 2; //new error
-	    ELSE
-	        #state := 3; //undefiniert
-	    END_IF;
+		IF NOT #st_error AND NOT #new_error THEN
+			#state := 0; //no error
+		ELSIF #st_error AND NOT #st_new_error THEN
+			#state := 1; //error
+		ELSIF #error AND #st_new_error THEN
+			#state := 2; //new error
+		ELSE
+			#state := 3; //undefiniert
+		END_IF;
 	END_REGION
 	
 	
 	REGION OUTPUTS
-	    #error := #st_error;
-	    #new_error := #st_new_error;
-	    
+		#error := #st_error;
+		#new_error := #st_new_error;
+		
 	END_REGION
 	
 END_FUNCTION_BLOCK
@@ -219,57 +219,57 @@ END_FUNCTION_BLOCK
 FUNCTION "fc_Meldungen-WORD" : Void
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
-   VAR_INPUT 
-      ON : Bool;
-      x0 : Bool;
-      x1 : Bool;
-      x2 : Bool;
-      x3 : Bool;
-      x4 : Bool;
-      x5 : Bool;
-      x6 : Bool;
-      x7 : Bool;
-      x8 : Bool;
-      x9 : Bool;
-      x10 : Bool;
-      x11 : Bool;
-      x12 : Bool;
-      x13 : Bool;
-      x14 : Bool;
-      x15 : Bool;
-   END_VAR
+VAR_INPUT 
+	ON : Bool;
+	x0 : Bool;
+	x1 : Bool;
+	x2 : Bool;
+	x3 : Bool;
+	x4 : Bool;
+	x5 : Bool;
+	x6 : Bool;
+	x7 : Bool;
+	x8 : Bool;
+	x9 : Bool;
+	x10 : Bool;
+	x11 : Bool;
+	x12 : Bool;
+	x13 : Bool;
+	x14 : Bool;
+	x15 : Bool;
+END_VAR
 
-   VAR_OUTPUT 
-      Word_OUT : Word;
-   END_VAR
+VAR_OUTPUT 
+	Word_OUT : Word;
+END_VAR
 
-   VAR_TEMP 
-      tmp_word : Word;
-   END_VAR
+VAR_TEMP 
+	tmp_word : Word;
+END_VAR
 
 
 BEGIN
 	REGION _name_
-	    IF #ON THEN
-	        #Word_OUT.%X0 := #x0;
-	        #Word_OUT.%X1 := #x1;
-	        #Word_OUT.%X2 := #x2;
-	        #Word_OUT.%X3 := #x3;
-	        #Word_OUT.%X4 := #x4;
-	        #Word_OUT.%X5 := #x5;
-	        #Word_OUT.%X6 := #x6;
-	        #Word_OUT.%X7 := #x7;
-	        #Word_OUT.%X8 := #x8;
-	        #Word_OUT.%X9 := #x9;
-	        #Word_OUT.%X10 := #x10;
-	        #Word_OUT.%X11 := #x11;
-	        #Word_OUT.%X12 := #x12;
-	        #Word_OUT.%X13 := #x13;
-	        #Word_OUT.%X14 := #x14;
-	        #Word_OUT.%X15 := #x15;
-	    ELSE
-	        #Word_OUT := #tmp_word;
-	    END_IF;
+		IF #ON THEN
+			#Word_OUT.%X0 := #x0;
+			#Word_OUT.%X1 := #x1;
+			#Word_OUT.%X2 := #x2;
+			#Word_OUT.%X3 := #x3;
+			#Word_OUT.%X4 := #x4;
+			#Word_OUT.%X5 := #x5;
+			#Word_OUT.%X6 := #x6;
+			#Word_OUT.%X7 := #x7;
+			#Word_OUT.%X8 := #x8;
+			#Word_OUT.%X9 := #x9;
+			#Word_OUT.%X10 := #x10;
+			#Word_OUT.%X11 := #x11;
+			#Word_OUT.%X12 := #x12;
+			#Word_OUT.%X13 := #x13;
+			#Word_OUT.%X14 := #x14;
+			#Word_OUT.%X15 := #x15;
+		ELSE
+			#Word_OUT := #tmp_word;
+		END_IF;
 	END_REGION
 	
 END_FUNCTION
@@ -278,15 +278,15 @@ DATA_BLOCK "100_DB_Meldungen"
 { S7_Optimized_Access := 'FALSE' }
 VERSION : 0.1
 NON_RETAIN
-   STRUCT 
-      HMI : "typ_Meld_HMI";
-      Meld : "typ_Meld";
-      "PUT-GET" : Struct
-         ACK : Bool;   // Reset
-         ACK_NA : Bool;   // Reset Not-Halt
-      END_STRUCT;
-      Meldungen : Array[0..7] of Word;
-   END_STRUCT;
+STRUCT 
+	HMI : "typ_Meld_HMI";
+	Meld : "typ_Meld";
+	"PUT-GET" : Struct
+		ACK : Bool;   // Reset
+		ACK_NA : Bool;   // Reset Not-Halt
+	END_STRUCT;
+	Meldungen : Array[0..7] of Word;
+END_STRUCT;
 
 
 BEGIN
@@ -296,259 +296,259 @@ END_DATA_BLOCK
 FUNCTION_BLOCK "100_Meldungen"
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
-   VAR 
-      fb_alarming_Instance : "fb_alarming";
-   END_VAR
+VAR 
+	fb_alarming_Instance : "fb_alarming";
+END_VAR
 
 
 BEGIN
 	REGION Quittierung
-	    //Quittierung
-	    "100_DB_Meldungen".Meld.Reset := "100_DB_Meldungen".HMI.ACK OR "100_DB_Meldungen"."PUT-GET".ACK;
+		//Quittierung
+		"100_DB_Meldungen".Meld.Reset := "100_DB_Meldungen".HMI.ACK OR "100_DB_Meldungen"."PUT-GET".ACK;
 	END_REGION
 	REGION Alarming
-	    //ALarming
-	    #fb_alarming_Instance(reset := "100_DB_Meldungen".Meld.Reset,
-	                          error => "100_DB_Meldungen".Meld.Error,
-	                          new_error => "100_DB_Meldungen".Meld.NewError,
-	                          state => "100_DB_Meldungen".Meld.State,
-	                          Meldungen := "100_DB_Meldungen".Meldungen);
-	    
+		//ALarming
+		#fb_alarming_Instance(reset := "100_DB_Meldungen".Meld.Reset,
+							error => "100_DB_Meldungen".Meld.Error,
+							new_error => "100_DB_Meldungen".Meld.NewError,
+							state => "100_DB_Meldungen".Meld.State,
+							Meldungen := "100_DB_Meldungen".Meldungen);
+		
 	END_REGION
 	REGION [1] Meldungen 1 .. 16
-	    // x0 = M1  |  x8   = M9
-	    // x1 = M2  |  x9   = M10
-	    // x2 = M3  |  x10 = M11
-	    // x3 = M4  |  x11 = M12
-	    // x4 = M5  |  x12 = M13
-	    // x5 = M6  |  x13 = M14
-	    // x6 = M7  |  x14 = M15
-	    // x7 = M8  |  x15 = M16
-	    "fc_Meldungen-WORD"(ON := FALSE,
-	                        x0 := FALSE,
-	                        x1 := FALSE,
-	                        x2 := FALSE,
-	                        x3 := FALSE,
-	                        x4 := FALSE,
-	                        x5 := FALSE,
-	                        x6 := FALSE,
-	                        x7 := FALSE,
-	                        x8 := FALSE,
-	                        x9 := FALSE,
-	                        x10 := FALSE,
-	                        x11 := FALSE,
-	                        x12 := FALSE,
-	                        x13 := FALSE,
-	                        x14 := FALSE,
-	                        x15 := FALSE,
-	                        Word_OUT => "100_DB_Meldungen".Meldungen[0]
-	    );
+		// x0 = M1  |  x8   = M9
+		// x1 = M2  |  x9   = M10
+		// x2 = M3  |  x10 = M11
+		// x3 = M4  |  x11 = M12
+		// x4 = M5  |  x12 = M13
+		// x5 = M6  |  x13 = M14
+		// x6 = M7  |  x14 = M15
+		// x7 = M8  |  x15 = M16
+		"fc_Meldungen-WORD"(ON := FALSE,
+							x0 := FALSE,
+							x1 := FALSE,
+							x2 := FALSE,
+							x3 := FALSE,
+							x4 := FALSE,
+							x5 := FALSE,
+							x6 := FALSE,
+							x7 := FALSE,
+							x8 := FALSE,
+							x9 := FALSE,
+							x10 := FALSE,
+							x11 := FALSE,
+							x12 := FALSE,
+							x13 := FALSE,
+							x14 := FALSE,
+							x15 := FALSE,
+							Word_OUT => "100_DB_Meldungen".Meldungen[0]
+		);
 	END_REGION
 	REGION [1] Meldungen 17 .. 32
-	    // x0 = M17  |  x8   = M25
-	    // x1 = M18  |  x9   = M26
-	    // x2 = M19  |  x10 = M27
-	    // x3 = M20  |  x11 = M28
-	    // x4 = M21  |  x12 = M29
-	    // x5 = M22  |  x13 = M30
-	    // x6 = M23  |  x14 = M31
-	    // x7 = M24  |  x15 = M32
-	    "fc_Meldungen-WORD"(ON := FALSE,
-	                        x0 := FALSE,
-	                        x1 := FALSE,
-	                        x2 := FALSE,
-	                        x3 := FALSE,
-	                        x4 := FALSE,
-	                        x5 := FALSE,
-	                        x6 := FALSE,
-	                        x7 := FALSE,
-	                        x8 := FALSE,
-	                        x9 := FALSE,
-	                        x10 := FALSE,
-	                        x11 := FALSE,
-	                        x12 := FALSE,
-	                        x13 := FALSE,
-	                        x14 := FALSE,
-	                        x15 := FALSE,
-	                        Word_OUT => "100_DB_Meldungen".Meldungen[1]
-	    );
+		// x0 = M17  |  x8   = M25
+		// x1 = M18  |  x9   = M26
+		// x2 = M19  |  x10 = M27
+		// x3 = M20  |  x11 = M28
+		// x4 = M21  |  x12 = M29
+		// x5 = M22  |  x13 = M30
+		// x6 = M23  |  x14 = M31
+		// x7 = M24  |  x15 = M32
+		"fc_Meldungen-WORD"(ON := FALSE,
+							x0 := FALSE,
+							x1 := FALSE,
+							x2 := FALSE,
+							x3 := FALSE,
+							x4 := FALSE,
+							x5 := FALSE,
+							x6 := FALSE,
+							x7 := FALSE,
+							x8 := FALSE,
+							x9 := FALSE,
+							x10 := FALSE,
+							x11 := FALSE,
+							x12 := FALSE,
+							x13 := FALSE,
+							x14 := FALSE,
+							x15 := FALSE,
+							Word_OUT => "100_DB_Meldungen".Meldungen[1]
+		);
 	END_REGION
 	REGION [2] Meldungen 33 .. 48
-	    // x0 = M33  |  x8   = M41
-	    // x1 = M34  |  x9   = M42
-	    // x2 = M35  |  x10 = M43
-	    // x3 = M36  |  x11 = M44
-	    // x4 = M37  |  x12 = M45
-	    // x5 = M38  |  x13 = M46
-	    // x6 = M39  |  x14 = M47
-	    // x7 = M40  |  x15 = M48
-	    "fc_Meldungen-WORD"(ON := FALSE,
-	                        x0 := FALSE,
-	                        x1 := FALSE,
-	                        x2 := FALSE,
-	                        x3 := FALSE,
-	                        x4 := FALSE,
-	                        x5 := FALSE,
-	                        x6 := FALSE,
-	                        x7 := FALSE,
-	                        x8 := FALSE,
-	                        x9 := FALSE,
-	                        x10 := FALSE,
-	                        x11 := FALSE,
-	                        x12 := FALSE,
-	                        x13 := FALSE,
-	                        x14 := FALSE,
-	                        x15 := FALSE,
-	                        Word_OUT => "100_DB_Meldungen".Meldungen[2]
-	    );
+		// x0 = M33  |  x8   = M41
+		// x1 = M34  |  x9   = M42
+		// x2 = M35  |  x10 = M43
+		// x3 = M36  |  x11 = M44
+		// x4 = M37  |  x12 = M45
+		// x5 = M38  |  x13 = M46
+		// x6 = M39  |  x14 = M47
+		// x7 = M40  |  x15 = M48
+		"fc_Meldungen-WORD"(ON := FALSE,
+							x0 := FALSE,
+							x1 := FALSE,
+							x2 := FALSE,
+							x3 := FALSE,
+							x4 := FALSE,
+							x5 := FALSE,
+							x6 := FALSE,
+							x7 := FALSE,
+							x8 := FALSE,
+							x9 := FALSE,
+							x10 := FALSE,
+							x11 := FALSE,
+							x12 := FALSE,
+							x13 := FALSE,
+							x14 := FALSE,
+							x15 := FALSE,
+							Word_OUT => "100_DB_Meldungen".Meldungen[2]
+		);
 	END_REGION
 	REGION [3] Meldungen 49 .. 64
-	    // x0 = M49  |  x8   = M57
-	    // x1 = M50  |  x9   = M58
-	    // x2 = M51  |  x10 = M59
-	    // x3 = M52  |  x11 = M60
-	    // x4 = M53  |  x12 = M61
-	    // x5 = M54  |  x13 = M62
-	    // x6 = M55  |  x14 = M63
-	    // x7 = M56  |  x15 = M64
-	    "fc_Meldungen-WORD"(ON := FALSE,
-	                        x0 := FALSE,
-	                        x1 := FALSE,
-	                        x2 := FALSE,
-	                        x3 := FALSE,
-	                        x4 := FALSE,
-	                        x5 := FALSE,
-	                        x6 := FALSE,
-	                        x7 := FALSE,
-	                        x8 := FALSE,
-	                        x9 := FALSE,
-	                        x10 := FALSE,
-	                        x11 := FALSE,
-	                        x12 := FALSE,
-	                        x13 := FALSE,
-	                        x14 := FALSE,
-	                        x15 := FALSE,
-	                        Word_OUT => "100_DB_Meldungen".Meldungen[3]
-	    );
+		// x0 = M49  |  x8   = M57
+		// x1 = M50  |  x9   = M58
+		// x2 = M51  |  x10 = M59
+		// x3 = M52  |  x11 = M60
+		// x4 = M53  |  x12 = M61
+		// x5 = M54  |  x13 = M62
+		// x6 = M55  |  x14 = M63
+		// x7 = M56  |  x15 = M64
+		"fc_Meldungen-WORD"(ON := FALSE,
+							x0 := FALSE,
+							x1 := FALSE,
+							x2 := FALSE,
+							x3 := FALSE,
+							x4 := FALSE,
+							x5 := FALSE,
+							x6 := FALSE,
+							x7 := FALSE,
+							x8 := FALSE,
+							x9 := FALSE,
+							x10 := FALSE,
+							x11 := FALSE,
+							x12 := FALSE,
+							x13 := FALSE,
+							x14 := FALSE,
+							x15 := FALSE,
+							Word_OUT => "100_DB_Meldungen".Meldungen[3]
+		);
 	END_REGION
 	REGION [4] Meldungen 65 .. 80
-	    // x0 = M65  |  x8   = M73
-	    // x1 = M66  |  x9   = M74
-	    // x2 = M67  |  x10 = M75
-	    // x3 = M68  |  x11 = M76
-	    // x4 = M69  |  x12 = M77
-	    // x5 = M70  |  x13 = M78
-	    // x6 = M71  |  x14 = M79
-	    // x7 = M72  |  x15 = M80
-	    "fc_Meldungen-WORD"(ON := FALSE,
-	                        x0 := FALSE,
-	                        x1 := FALSE,
-	                        x2 := FALSE,
-	                        x3 := FALSE,
-	                        x4 := FALSE,
-	                        x5 := FALSE,
-	                        x6 := FALSE,
-	                        x7 := FALSE,
-	                        x8 := FALSE,
-	                        x9 := FALSE,
-	                        x10 := FALSE,
-	                        x11 := FALSE,
-	                        x12 := FALSE,
-	                        x13 := FALSE,
-	                        x14 := FALSE,
-	                        x15 := FALSE,
-	                        Word_OUT => "100_DB_Meldungen".Meldungen[4]
-	    );
-	    
+		// x0 = M65  |  x8   = M73
+		// x1 = M66  |  x9   = M74
+		// x2 = M67  |  x10 = M75
+		// x3 = M68  |  x11 = M76
+		// x4 = M69  |  x12 = M77
+		// x5 = M70  |  x13 = M78
+		// x6 = M71  |  x14 = M79
+		// x7 = M72  |  x15 = M80
+		"fc_Meldungen-WORD"(ON := FALSE,
+							x0 := FALSE,
+							x1 := FALSE,
+							x2 := FALSE,
+							x3 := FALSE,
+							x4 := FALSE,
+							x5 := FALSE,
+							x6 := FALSE,
+							x7 := FALSE,
+							x8 := FALSE,
+							x9 := FALSE,
+							x10 := FALSE,
+							x11 := FALSE,
+							x12 := FALSE,
+							x13 := FALSE,
+							x14 := FALSE,
+							x15 := FALSE,
+							Word_OUT => "100_DB_Meldungen".Meldungen[4]
+		);
+		
 	END_REGION
 	REGION [5] Meldungen 81 .. 96
-	    // x0 = M81  |  x8   = M89
-	    // x1 = M82  |  x9   = M90
-	    // x2 = M83  |  x10 = M91
-	    // x3 = M84  |  x11 = M92
-	    // x4 = M85  |  x12 = M93
-	    // x5 = M86  |  x13 = M94
-	    // x6 = M87  |  x14 = M95
-	    // x7 = M88  |  x15 = M96
-	    "fc_Meldungen-WORD"(ON := FALSE,
-	                        x0 := FALSE,
-	                        x1 := FALSE,
-	                        x2 := FALSE,
-	                        x3 := FALSE,
-	                        x4 := FALSE,
-	                        x5 := FALSE,
-	                        x6 := FALSE,
-	                        x7 := FALSE,
-	                        x8 := FALSE,
-	                        x9 := FALSE,
-	                        x10 := FALSE,
-	                        x11 := FALSE,
-	                        x12 := FALSE,
-	                        x13 := FALSE,
-	                        x14 := FALSE,
-	                        x15 := FALSE,
-	                        Word_OUT => "100_DB_Meldungen".Meldungen[5]
-	    );
+		// x0 = M81  |  x8   = M89
+		// x1 = M82  |  x9   = M90
+		// x2 = M83  |  x10 = M91
+		// x3 = M84  |  x11 = M92
+		// x4 = M85  |  x12 = M93
+		// x5 = M86  |  x13 = M94
+		// x6 = M87  |  x14 = M95
+		// x7 = M88  |  x15 = M96
+		"fc_Meldungen-WORD"(ON := FALSE,
+							x0 := FALSE,
+							x1 := FALSE,
+							x2 := FALSE,
+							x3 := FALSE,
+							x4 := FALSE,
+							x5 := FALSE,
+							x6 := FALSE,
+							x7 := FALSE,
+							x8 := FALSE,
+							x9 := FALSE,
+							x10 := FALSE,
+							x11 := FALSE,
+							x12 := FALSE,
+							x13 := FALSE,
+							x14 := FALSE,
+							x15 := FALSE,
+							Word_OUT => "100_DB_Meldungen".Meldungen[5]
+		);
 	END_REGION
 	REGION [6] Meldungen 97 .. 112
-	    // x0 = M97  |  x8   = M105
-	    // x1 = M98  |  x9   = M106
-	    // x2 = M99  |  x10 = M107
-	    // x3 = M100  |  x11 = M108
-	    // x4 = M101  |  x12 = M109
-	    // x5 = M102  |  x13 = M110
-	    // x6 = M103  |  x14 = M111
-	    // x7 = M104  |  x15 = M112
-	    "fc_Meldungen-WORD"(ON := FALSE,
-	                        x0 := FALSE,
-	                        x1 := FALSE,
-	                        x2 := FALSE,
-	                        x3 := FALSE,
-	                        x4 := FALSE,
-	                        x5 := FALSE,
-	                        x6 := FALSE,
-	                        x7 := FALSE,
-	                        x8 := FALSE,
-	                        x9 := FALSE,
-	                        x10 := FALSE,
-	                        x11 := FALSE,
-	                        x12 := FALSE,
-	                        x13 := FALSE,
-	                        x14 := FALSE,
-	                        x15 := FALSE,
-	                        Word_OUT => "100_DB_Meldungen".Meldungen[6]
-	    );
-	    
+		// x0 = M97  |  x8   = M105
+		// x1 = M98  |  x9   = M106
+		// x2 = M99  |  x10 = M107
+		// x3 = M100  |  x11 = M108
+		// x4 = M101  |  x12 = M109
+		// x5 = M102  |  x13 = M110
+		// x6 = M103  |  x14 = M111
+		// x7 = M104  |  x15 = M112
+		"fc_Meldungen-WORD"(ON := FALSE,
+							x0 := FALSE,
+							x1 := FALSE,
+							x2 := FALSE,
+							x3 := FALSE,
+							x4 := FALSE,
+							x5 := FALSE,
+							x6 := FALSE,
+							x7 := FALSE,
+							x8 := FALSE,
+							x9 := FALSE,
+							x10 := FALSE,
+							x11 := FALSE,
+							x12 := FALSE,
+							x13 := FALSE,
+							x14 := FALSE,
+							x15 := FALSE,
+							Word_OUT => "100_DB_Meldungen".Meldungen[6]
+		);
+		
 	END_REGION
 	REGION [7] Meldungen 113 .. 128
-	    // x0 = M113  |  x8   = M121
-	    // x1 = M114  |  x9   = M122
-	    // x2 = M115  |  x10 = M123
-	    // x3 = M116  |  x11 = M124
-	    // x4 = M117  |  x12 = M125
-	    // x5 = M118  |  x13 = M126
-	    // x6 = M119  |  x14 = M127
-	    // x7 = M120  |  x15 = M128
-	    "fc_Meldungen-WORD"(ON := FALSE,
-	                        x0 := FALSE,
-	                        x1 := FALSE,
-	                        x2 := FALSE,
-	                        x3 := FALSE,
-	                        x4 := FALSE,
-	                        x5 := FALSE,
-	                        x6 := FALSE,
-	                        x7 := FALSE,
-	                        x8 := FALSE,
-	                        x9 := FALSE,
-	                        x10 := FALSE,
-	                        x11 := FALSE,
-	                        x12 := FALSE,
-	                        x13 := FALSE,
-	                        x14 := FALSE,
-	                        x15 := FALSE,
-	                        Word_OUT => "100_DB_Meldungen".Meldungen[7]
-	    );
-	    
+		// x0 = M113  |  x8   = M121
+		// x1 = M114  |  x9   = M122
+		// x2 = M115  |  x10 = M123
+		// x3 = M116  |  x11 = M124
+		// x4 = M117  |  x12 = M125
+		// x5 = M118  |  x13 = M126
+		// x6 = M119  |  x14 = M127
+		// x7 = M120  |  x15 = M128
+		"fc_Meldungen-WORD"(ON := FALSE,
+							x0 := FALSE,
+							x1 := FALSE,
+							x2 := FALSE,
+							x3 := FALSE,
+							x4 := FALSE,
+							x5 := FALSE,
+							x6 := FALSE,
+							x7 := FALSE,
+							x8 := FALSE,
+							x9 := FALSE,
+							x10 := FALSE,
+							x11 := FALSE,
+							x12 := FALSE,
+							x13 := FALSE,
+							x14 := FALSE,
+							x15 := FALSE,
+							Word_OUT => "100_DB_Meldungen".Meldungen[7]
+		);
+		
 	END_REGION
 END_FUNCTION_BLOCK
 
