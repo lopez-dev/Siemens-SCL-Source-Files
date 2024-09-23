@@ -1,166 +1,128 @@
-TYPE "typ_Timers_UDT"
+﻿TYPE "udt_timer"
 VERSION : 0.1
    STRUCT
-      state : Int;   // current state of the timer
-      init_time : Int;   // initial time for the timer in 100ms
-      cur_time : Int;   // currently elapsed time for this timer
-      time_elapsed : Bool;   // true: timer has completed / false: timer is running or stopped
+      timerState : Int;   // Current state of the timer: 0=Off, 1=Running, 2=Paused, 3=Elapsed
+      startTime : Time;   // Time when the timer started
+      setTime : Time;   // Pre-defined duration for which the timer should run (e.g., 2500 ms)
+      elapsedTime : Time;   // Time that has passed since the timer started
    END_STRUCT;
 
 END_TYPE
 
-DATA_BLOCK "Timer_DB"
+DATA_BLOCK "TimerDatabase"
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
 NON_RETAIN
    VAR 
-      interrupt_set : Bool;   // Interrupt of cyclib OB
-      update_counter : Int;   // Counter for cyclic updates
-      timers { S7_SetPoint := 'False'} : Array[0..600] of "typ_Timers_UDT";   //  This is the data structure for stateful timers. It can be used in a DB that holds this structure in an array. The index of the array will be the timer array. The following states are defined: 0: Off 1: Running 2: Held 3: Elapsed
+      timersTime : Time;   // Current system time used for timers
+      timersAmount : Int;   // Total number of timers in the array
+      timersPerBatch : Int;   // Number of timers processed per cycle/batch 
+      timersBatchCounter : Int;   // Counter to track which batch of timers is being updated
+      timers { S7_SetPoint := 'False'} : Array[0..599] of "udt_timer";   // Array holding the timer data structures
    END_VAR
 
 
 BEGIN
+   timersAmount := 600;
+   timersPerBatch := 60;
 
 END_DATA_BLOCK
-
-FUNCTION "TimerStateChange" : Void
-{ S7_Optimized_Access := 'TRUE' }
-VERSION : 0.1
-   VAR_INPUT 
-      new_state : Int;
-   END_VAR
-
-   VAR_IN_OUT 
-      actual_state : Int;
-   END_VAR
-
-
-BEGIN
-	    IF #actual_state <> #new_state THEN
-	        #actual_state := #new_state;
-	    END_IF;
-END_FUNCTION
-
-FUNCTION "TimerCheck" : Int
-{ S7_Optimized_Access := 'TRUE' }
-VERSION : 0.1
-   VAR_INPUT 
-      Timer_Nr : Int;
-   END_VAR
-
-
-BEGIN
-	    // State 0 = Off
-	    // State 1 = Running
-	    // State 2 = Held
-	    // State 3 = Elapsed
-	    #TimerCheck := "Timer_DB".timers[#Timer_Nr].state;
-END_FUNCTION
 
 FUNCTION "TimerReset" : Void
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
    VAR_INPUT 
-      Timer_Nr : Int;
+      Timer_Nr : Int;   // Index of the timer to reset
    END_VAR
 
 
 BEGIN
-	    IF "Timer_DB".timers[#Timer_Nr].state <> 0 THEN
-	        "TimerStateChange"(new_state := 0,
-	                           actual_state := "Timer_DB".timers[#Timer_Nr].state); // do state change (Running|Held|Elapsed -> Active)
-	        "Timer_DB".timers[#Timer_Nr].cur_time := 0;
-	        "Timer_DB".timers[#Timer_Nr].time_elapsed := false;
-	    END_IF;
+	    // Reset the specified timer state to 0 (Off)
+	    "timerDatabase".timers[#Timer_Nr].timerState := 0;
 END_FUNCTION
 
 FUNCTION "TimerStart" : Void
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
    VAR_INPUT 
-      Timer_Nr : Int;
-      "Time" : Int;   // Time in Sec * 10
+      Timer_Nr : Int;   // Index of the timer to start
    END_VAR
 
 
 BEGIN
-	    IF "Timer_DB".timers[#Timer_Nr].state = 0 THEN
-	        "Timer_DB".timers[#Timer_Nr].init_time := #Time;
-	        "TimerStateChange"(new_state := 1,
-	                           actual_state := "Timer_DB".timers[#Timer_Nr].state); // do state change (Active -> Running)
+	    // Start the timer if it is currently Off (State 0)
+	    IF "timerDatabase".timers[#Timer_Nr].timerState = 0 THEN
+	        "timerDatabase".timers[#Timer_Nr].startTime := "timerDatabase".timersTime;  // Set the start time to current system time
+	        "timerDatabase".timers[#Timer_Nr].timerState := 1;   // Set state to Running (State 1)
 	    END_IF;
 END_FUNCTION
 
-FUNCTION "TimerElapsed" : Bool
+FUNCTION "TimerTOF" : Void
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
    VAR_INPUT 
-      Timer_Nr : Int;
+      TimerNr : Int;   // Index of the timer
+      IN : Bool;   // Input condition to start/reset the timer
+   END_VAR
+
+   VAR_OUTPUT 
+      OUT : Bool;   // Output to indicate if the timer has elapsed
    END_VAR
 
 
 BEGIN
-	    // State 0 = Active
-	    // State 1 = Running
-	    // State 2 = Held
-	    // State 3 = Elapsed
-	    #TimerElapsed := "Timer_DB".timers[#Timer_Nr].state = 3;
+	    // Start or reset the timer based on input condition
+	    IF #IN AND ("TimerDatabase".timers[#TimerNr].timerState <> 2) THEN
+	        "TimerReset"(Timer_Nr := #TimerNr);
+	        "TimerStart"(Timer_Nr := #TimerNr);
+	        "TimerDatabase".timers[#TimerNr].timerState := 2;
+	    ELSIF NOT #IN AND ("TimerDatabase".timers[#TimerNr].timerState = 2) THEN
+	        "TimerReset"(Timer_Nr := #TimerNr);
+	        "TimerStart"(Timer_Nr := #TimerNr);
+	    END_IF;
+	    
+	    // Check if the timer has elapsed
+	    #OUT := #IN OR "TimerDatabase".timers[#TimerNr].timerState = 1;
 END_FUNCTION
-
-DATA_BLOCK "Timer_values_DB"
-{ S7_Optimized_Access := 'TRUE' }
-VERSION : 0.1
-NON_RETAIN
-   VAR 
-      timer_value { S7_SetPoint := 'True'} : Array[0..600] of Int;
-   END_VAR
-
-
-BEGIN
-   timer_value[0] := 100;
-   timer_value[10] := 30;
-   timer_value[11] := 50;
-
-END_DATA_BLOCK
 
 FUNCTION "TimerTON" : Void
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
    VAR_INPUT 
-      TimerNr : Int;
-      IN : Bool;
+      TimerNr : Int;   // Index of the timer
+      IN : Bool;   // Input condition to start/reset the timer
    END_VAR
 
    VAR_OUTPUT 
-      OUT : Bool;
+      OUT : Bool;   // Output to indicate if the timer has elapsed
    END_VAR
 
 
 BEGIN
-	IF #IN AND NOT ("TimerCheck"(Timer_Nr := #TimerNr) = 1) THEN
-	    "TimerReset"(Timer_Nr := #TimerNr);
-	    "TimerStart"(Timer_Nr := #TimerNr,
-	                 "Time" := "Timer_values_DB".timer_value[#TimerNr]);
-	ELSIF NOT #IN AND NOT ("TimerCheck"(Timer_Nr := #TimerNr) = 0) THEN
-	    "TimerReset"(Timer_Nr := #TimerNr);
-	END_IF;
-	#OUT := "TimerElapsed"(Timer_Nr := #TimerNr);
-	
+	    // Start or reset the timer based on input condition
+	    IF #IN AND ("TimerDatabase".timers[#TimerNr].timerState = 0) THEN
+	        "TimerReset"(Timer_Nr := #TimerNr);
+	        "TimerStart"(Timer_Nr := #TimerNr);
+	    ELSIF NOT #IN AND NOT ("TimerDatabase".timers[#TimerNr].timerState = 0) THEN
+	        "TimerReset"(Timer_Nr := #TimerNr);
+	    END_IF;
+	    
+	    // Check if the timer has elapsed
+	    #OUT := "TimerDatabase".timers[#TimerNr].timerState = 3;
 END_FUNCTION
 
-FUNCTION "TimerHold" : Void
+FUNCTION "TimerPause" : Void
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
    VAR_INPUT 
-      Timer_nr : Int;
+      Timer_nr : Int;   // Index of the timer to pause
    END_VAR
 
 
 BEGIN
-	    IF "Timer_DB".timers[#Timer_nr].state = 1 THEN
-	        "TimerStateChange"(new_state := 2,
-	                             actual_state := "Timer_DB".timers[#Timer_nr].state); // do state change (Running -> Held)
+	    // Pause the timer if it's in Running state (State 1)
+	    IF "TimerDatabase".timers[#Timer_nr].timerState = 1 THEN
+	        "TimerDatabase".timers[#Timer_nr].timerState := 2; // Change to Held state (State 2)
 	    END_IF;
 END_FUNCTION
 
@@ -168,120 +130,124 @@ FUNCTION "TimerResume" : Void
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
    VAR_INPUT 
-      Timer_nr : Int;
+      Timer_nr : Int;   // Index of the timer to resume
    END_VAR
 
 
 BEGIN
-	    IF "Timer_DB".timers[#Timer_nr].state = 2 THEN
-	        "TimerStateChange"(new_state := 1,
-	                           actual_state := "Timer_DB".timers[#Timer_nr].state); // do state change (Held -> Running)
+	    // Resume the timer if it's in Held state (State 2)
+	    IF "TimerDatabase".timers[#Timer_nr].timerState = 2 THEN
+	        "TimerDatabase".timers[#Timer_nr].startTime := "TimerDatabase".timersTime - "TimerDatabase".timers[#Timer_nr].elapsedTime;
+	        "TimerDatabase".timers[#Timer_nr].timerState := 1; // Change to Running state (State 1)
 	    END_IF;
 END_FUNCTION
 
-FUNCTION "TimerManager" : Void
+FUNCTION "TimerHandling" : Void
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
    VAR_TEMP 
-      index : Int;
-      countPerCycle : Int;
-      cycleTime : Int;
+      ret : Int;   // Return code from time read instruction
+      CurrentTime_DTL {InstructionName := 'DTL'; LibVersion := '1.0'} : DTL;   // Data structure to hold current system time
+      nStartTimerIndex : Int;   // Index for the first timer in the current batch
+      nEndTimerIndex : Int;   // Index for the last timer in the current batch
+      iTimerIndex : Int;   // Loop variable for iterating through timers
+      nTimersPerBatch : Int;   // Number of timers processed per batch
+      timersArraySize : Int;   // Total number of timers in the array
+   END_VAR
+
+   VAR CONSTANT 
+      MAX_TIME : Time := T#23H_59M_59S_999MS;   // Maximum time duration before overflow
    END_VAR
 
 
 BEGIN
-	// init
-	#countPerCycle := 60;
-	#cycleTime := 1;
+	REGION Time_Read
+	    // Read the current system time and convert it to TIME format
+	    #ret := RD_LOC_T(#CurrentTime_DTL);  // Read local time
+	    "TimerDatabase".timersTime := TOD_TO_TIME(IN := DTL_TO_TOD(IN := #CurrentTime_DTL));  // Convert DTL to TIME
+	END_REGION
 	
-	FOR #index := ("Timer_DB".update_counter * #countPerCycle) TO ("Timer_DB".update_counter * #countPerCycle + (#countPerCycle - 1)) DO
-	    IF "Timer_DB".timers[#index].state = 1 THEN // time is Running
-	        IF "Timer_DB".timers[#index].cur_time >= "Timer_DB".timers[#index].init_time THEN
-	            "TimerStateChange"(new_state := 3,
-	                                actual_state := "Timer_DB".timers[#index].state); // do state change (Running -> Elapsed)
-	            "Timer_DB".timers[#index].time_elapsed := true;
+	REGION Timer_Initialization
+	    REGION Hardcoded_Max_Values
+	        // Ensure the timers array size does not exceed 600 (since array index is 0..599)
+	        IF "TimerDatabase".timersAmount > 600 THEN
+	            "TimerDatabase".timersAmount := 600;
 	        END_IF;
-	        "Timer_DB".timers[#index].cur_time := ("Timer_DB".timers[#index].cur_time + #cycleTime * 10);
+	        // Ensure the timersPerBatch does not exceed timersAmount
+	        IF "TimerDatabase".timersPerBatch > "TimerDatabase".timersAmount THEN
+	            "TimerDatabase".timersPerBatch := "TimerDatabase".timersAmount;
+	        END_IF;
+	        
+	        // Ensure timersArraySize is a multiple of timersPerBatch
+	        // Adjust timersArraySize so that it is divisible by timersPerBatch
+	        IF ("TimerDatabase".timersAmount MOD "TimerDatabase".timersPerBatch) > 0 THEN
+	            "TimerDatabase".timersAmount := "TimerDatabase".timersAmount - ("TimerDatabase".timersAmount MOD "TimerDatabase".timersPerBatch);
+	        END_IF;
+	        
+	        // Store the adjusted timersArraySize in a local variable
+	        #timersArraySize := "TimerDatabase".timersAmount;
+	        
+	        // Ensure the number of timers processed per batch does not exceed the array size
+	        IF "TimerDatabase".timersPerBatch > #timersArraySize THEN
+	            "TimerDatabase".timersPerBatch := #timersArraySize;
+	        END_IF;
+	        
+	        // Store the number of timers per batch in a local variable
+	        #nTimersPerBatch := "TimerDatabase".timersPerBatch;
+	    END_REGION
+	    
+	    // Calculate the start and end index for the timers in the current batch
+	    #nStartTimerIndex := "TimerDatabase".timersBatchCounter * #nTimersPerBatch;
+	    
+	    // Ensure the end index does not exceed the array size (last index is timersAmount - 1)
+	    #nEndTimerIndex := #nStartTimerIndex + (#nTimersPerBatch - 1);
+	    IF #nEndTimerIndex >= #timersArraySize THEN
+	        #nEndTimerIndex := #timersArraySize - 1; // Adjust to the maximum valid index
 	    END_IF;
-	END_FOR;
+	END_REGION
 	
-	IF "Timer_DB".update_counter >= 9 THEN // Prepared for 600 timers
-	    "Timer_DB".update_counter := 0;
-	ELSE
-	    "Timer_DB".update_counter := "Timer_DB".update_counter + 1;
-	END_IF;
+	REGION Timer_Update
+	    // Loop through all timers in the current batch
+	    FOR #iTimerIndex := #nStartTimerIndex TO #nEndTimerIndex DO
+	        // Check if the timer is running (State 1)
+	        IF "TimerDatabase".timers[#iTimerIndex].timerState = 1 THEN
+	            // Calculate elapsed time
+	            "TimerDatabase".timers[#iTimerIndex].elapsedTime := "TimerDatabase".timersTime - "TimerDatabase".timers[#iTimerIndex].startTime;
+	            
+	            // Handle overflow: if current system time is less than start time, adjust for overflow
+	            IF "TimerDatabase".timersTime < "TimerDatabase".timers[#iTimerIndex].startTime THEN
+	                "TimerDatabase".timers[#iTimerIndex].elapsedTime := ("TimerDatabase".timersTime + #MAX_TIME) - "TimerDatabase".timers[#iTimerIndex].startTime;
+	            END_IF;
+	            
+	            // If elapsed time >= setTime, change state to Elapsed (State 3)
+	            IF "TimerDatabase".timers[#iTimerIndex].elapsedTime >= "TimerDatabase".timers[#iTimerIndex].setTime THEN
+	                "TimerDatabase".timers[#iTimerIndex].timerState := 3; // Set state to Elapsed
+	            END_IF;
+	        END_IF;
+	    END_FOR;
+	END_REGION
+	
+	REGION Batch_Counter_Update
+	    // Update batch counter for next group of timers
+	    IF "TimerDatabase".timersBatchCounter >= (#timersArraySize / #nTimersPerBatch) - 1 THEN
+	        "TimerDatabase".timersBatchCounter := 0;
+	    ELSE
+	        "TimerDatabase".timersBatchCounter := "TimerDatabase".timersBatchCounter + 1;
+	    END_IF;
+	END_REGION
+	
 END_FUNCTION
 
-FUNCTION "TimerReadme" : Void
+FUNCTION "TimerElapsed" : Bool
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
+   VAR_INPUT 
+      Timer_Nr : Int;   // Index of the timer to check
+   END_VAR
+
 
 BEGIN
-	REGION Deutsch
-	(*
-	************************************************
-	#################################################
-	################# Disclaimer ####################
-	Der Cyclic interrupt OB muss manuell erstellt werden.
-	Vergessen Sie nicht, die Interrupt-Zeit 10000 mikrosekunden festzulegen und
-	TimerManager im Cyclic interrupt OB aufzurufen.
-	#################################################
-	#################################################
-	*************************************************
-	
-	Zustände:
-	Zustand 0 = Aus
-	Zustand 1 = Laufend
-	Zustand 2 = Halten
-	Zustand 3 = Abgelaufen
-	
-	Funktionen:
-	TimerCheck:     Gibt den aktuellen Zustand des Timers zurück
-	
-	TimerReset:     Setzt den Zustand auf 0 und die Standardwerte zurück
-	
-	TimerStart:     Setzt den Zustand auf 1 und startet den Timer mit der Initialzeit
-	
-	TimerHold:      Setzt den Zustand auf 2 und hält den Timer an
-	
-	TimerResume:    Setzt den Zustand erneut auf 1 und fährt den Timer fort
-	
-	TimerManager:   Zählt die Zeit der Timer hoch und setzt den Zustand auf 3, wenn sie abgelaufen sind
-	*)
-	END_REGION
-	
-	REGION English
-	 (* ENGLISH
-	************************************************
-	#################################################
-	################# Disclaimer ####################
-	The cyclic interrupt OB must be created manually.
-	Don't forget to set the interrupt time to 10000 microseconds and
-	call TimerManager in the cyclic interrupt OB.
-	#################################################
-	#################################################
-	*************************************************
-	
-	States:
-	    State 0 = Off
-	    State 1 = Running
-	    State 2 = Hold
-	    State 3 = Elapsed
-	    
-	Functions:
-	    TimerCheck:     Returns the current state of the timer
-	    
-	    TimerReset:     Changes the state to 0 and sets default values
-	    
-	    TimerStart:     Changes the state to 1 and starts the timer with the initial time
-	    
-	    TimerHold:      Changes the state to 2 and holds the timer
-	    
-	    TimerResume:    Changes the state back to 1 and resumes the timer
-	    
-	    TimerManager:   Counts up the time of the timers and changes the state to 3 when they are elapsed
-	*)
-	END_REGION
-	
+	    // Check if the timer state is Elapsed (State 3)
+	    #TimerElapsed := "TimerDatabase".timers[#Timer_Nr].timerState = 3;
 END_FUNCTION
 
