@@ -1,0 +1,223 @@
+TYPE BufferUDT
+    TITLE   = 'BufferDaten'
+    FAMILY  : 'Buffer' 
+    AUTHOR  : 'Lopez'
+STRUCT
+    loaded              : BOOL;       // TRUE = Ein Blech ist geladen
+    loadedcurrentDay    : INT;        // Tag der Beladung (1=Sonntag bis 7=Samstag)
+    loadedTime          : TOD;        // Uhrzeit der Beladung (Zeit des Tages)
+    loadedExpiredTime   : TIME;       // Verstrichene Zeit seit der Beladung (ms)
+END_STRUCT
+END_TYPE
+
+// ###########################################################################
+
+TYPE BufferStructUDT
+    TITLE   = 'BufferStruct'
+    FAMILY  : 'Buffer' 
+    AUTHOR  : 'Lopez'
+STRUCT
+    amountLoaded     : INT;               // Aktuelle Anzahl geladener Bleche im Puffer
+    firstLoadedTime  : TOD;               // Uhrzeit des ersten geladenen Blechs
+    firstLoadedcurrentDay   : INT;        // Tag der Beladung des ersten Blechs (1=Sonntag bis 7=Samstag)
+    firstExpiredTime : TIME;              // Verstrichene Zeit des ersten Blechs im Puffer
+    load             : BOOL;              // Startsignal für den Ladeprozess
+    unload           : BOOL;              // Startsignal für den Entladeprozess
+    manualLoad       : BOOL;              // Startsignal für den Ladeprozess (manuell)
+    manualUnload     : BOOL;              // Startsignal für den Entladeprozess (manuell)
+    loadFlag         : BOOL;              // Zustandsflag zur Flankenerkennung des Ladeprozesses
+    unloadFlag       : BOOL;              // Zustandsflag zur Flankenerkennung des Entladeprozesses
+    reset            : BOOL;              // Signal zum Zurücksetzen des gesamten Puffers
+    AmountFlag       : INT;               // Vorheriger Wert (zur Berechnung des StatAmount0)
+    currentDayFlag   : INT;               // Vorheriger Wert (zur Berechnung)
+    StatBuffered     : ARRAY[1..7] OF INT; // Maximale Anzahl an gepufferten Blechen pro Tag
+    StatMaxTime      : ARRAY[1..7] OF TIME; // Maximale gepufferte Zeit pro Tag
+    StatAmount0      : ARRAY[1..7] OF INT; // Anzahl der Tage, an denen der Speicher komplett leergefahren wurde
+    StatPorzLoaded   : INT;               // Prozentsatz des beladenen Puffers
+    BufferSize       : INT;               // Größe des Puffers bzw. des Arrays       
+    Buffer           : ARRAY [1..100] OF BufferUDT;  // Array für 100 Pufferplätze
+END_STRUCT;
+END_TYPE
+
+// ###########################################################################
+
+DATA_BLOCK BufferDB
+    TITLE   = 'Pufferplätze'
+    FAMILY  : 'Buffer' 
+    AUTHOR  : 'Lopez'
+STRUCT 
+    currentDT        : DT;         // Aktuelle Systemzeit im Format DATE_AND_TIME
+    currentDay       : INT;        // Aktueller Wochentag
+    currentTime      : TOD;        // Aktuelle Uhrzeit (Zeit des Tages)
+    Buffer           : ARRAY[1..2] OF BufferStructUDT; // Array für 2 Pufferstrukturen
+END_STRUCT
+
+BEGIN
+    // Initialisierungen
+    Buffer[1].BufferSize := 90;
+    Buffer[2].BufferSize := 89;
+END_DATA_BLOCK
+
+// ###########################################################################
+
+FUNCTION BufferManager : VOID
+(*  Verwaltung des Ein- und Ausladens der Bleche im Puffer.
+    Berechnet die verstrichene Zeit jedes geladenen Blechs.
+    Hinweis: Puffergröße in "BufferSize" anpassen, um Bereichsfehler zu vermeiden.
+*)
+VERSION : '0.1'
+FAMILY  : 'Buffer'
+AUTHOR  : 'Lopez'
+VAR_INPUT
+    IN_P1       :BOOL;
+    OUT_P1      :BOOL;
+    IN_P2       :BOOL;
+    OUT_P2      :BOOL;
+END_VAR
+
+VAR_TEMP
+    ret               : INT;             // Rückgabewert für das Lesen der Systemzeit
+    j                 : INT;             // Schleifenindex für Puffer
+    i                 : INT;             // Schleifenindex für Pufferplätze
+    load              : ARRAY[1..2] OF BOOL;  // Temporäre Ladevariable, eine pro Puffer
+    unload            : ARRAY[1..2] OF BOOL;  // Temporäre Entladevariable, eine pro Puffer
+    currTime          : DATE_AND_TIME;   // Systemzeit
+    timeDiff          : TIME;            // Zeitdifferenz zwischen aktueller Uhrzeit und Ladezeitpunkt
+    currentDayDiff    : INT;             // Differenz der Tage zwischen aktuellem Tag und Ladetag
+    BufferSize        : ARRAY[1..2] OF INT; // Maximale Größe des Puffers
+    amountCounter     : INT;             // Zähler für Anzahl der geladenen Bleche
+    firstLoadedTime   : TOD;             // Zeitpunkt des ersten geladenen Blechs
+    firstLoadedcurrentDay : INT;         // Tag der Beladung des ersten Blechs
+    firstExpiredTime  : TIME;            // Verstrichene Zeit des ersten Blechs im Puffer
+    addStatBuffered   : BOOL;            // Variable zur Erhöhung der StatBuffered um 1
+END_VAR
+
+BEGIN
+    // Eingaben
+    BufferDB.Buffer[1].load := IN_P1;   // Anheben Position 117    
+    BufferDB.Buffer[1].unload := OUT_P1; // Absenken Position 117
+    BufferDB.Buffer[2].load := IN_P2;   // Anheben Position 217
+    BufferDB.Buffer[2].unload := OUT_P2; // Absenken Position 217
+
+    // Systemzeit lesen
+    ret := READ_CLK(CDT := currTime);        // Lese Systemzeit in currTime
+    BufferDB.currentDay := DT_DAY(IN := currTime);  // Setze aktuellen Tag (1-7)
+    BufferDB.currentTime := DT_TOD(IN := currTime); // Setze aktuelle Tageszeit
+    
+    FOR j := 1 TO 2 DO 
+        // Bestimme Anzahl der zu bearbeitenden Plätze zur Optimierung der Performance
+        IF BufferDB.Buffer[j].amountLoaded <= BufferDB.Buffer[j].BufferSize - 1 THEN
+            BufferSize[j] :=  BufferDB.Buffer[j].amountLoaded + 1;
+        ELSE
+            BufferSize[j] :=  BufferDB.Buffer[j].BufferSize;
+        END_IF;
+
+        // Ladeoperation - positive Flankenerkennung
+        IF (BufferDB.Buffer[j].load OR BufferDB.Buffer[j].manualLoad) AND NOT BufferDB.Buffer[j].loadFlag THEN
+            load[j] := TRUE;                      // Ladeprozess aktiv
+            BufferDB.Buffer[j].loadFlag := TRUE;   // Ladeflag setzen, solange `load` oder `manualLoad` aktiv ist
+        ELSIF (NOT BufferDB.Buffer[j].load AND NOT BufferDB.Buffer[j].manualLoad) THEN
+            BufferDB.Buffer[j].loadFlag := FALSE;  // Ladeflag zurücksetzen, wenn weder `load` noch `manualLoad` aktiv sind
+            load[j] := FALSE;                      // Ladeprozess deaktivieren
+        END_IF;
+        
+        // Entladeoperation - positive Flankenerkennung
+        IF (BufferDB.Buffer[j].unload OR BufferDB.Buffer[j].manualUnload) AND NOT BufferDB.Buffer[j].unloadFlag THEN
+            unload[j] := TRUE;                     // Entladeprozess aktiv
+            BufferDB.Buffer[j].unloadFlag := TRUE;  // Entladeflag setzen, solange `unload` oder `manualUnload` aktiv ist
+        ELSIF (NOT BufferDB.Buffer[j].unload AND NOT BufferDB.Buffer[j].manualUnload) THEN
+            BufferDB.Buffer[j].unloadFlag := FALSE; // Entladeflag zurücksetzen, wenn weder `unload` noch `manualUnload` aktiv sind
+            unload[j] := FALSE;                     // Entladeprozess deaktivieren
+        END_IF;
+
+        // Ladeprozess - Bleche in den Puffer laden mit Zeitstempel
+        IF load[j] AND NOT unload[j] THEN
+            FOR i := BufferSize[j] TO 2 BY -1 DO
+                // Ladeinformationen der Plätze um einen Platz verschieben
+                BufferDB.Buffer[j].Buffer[i] := BufferDB.Buffer[j].Buffer[i-1];
+            END_FOR;
+            BufferDB.Buffer[j].Buffer[1].loaded := TRUE;  // Erster Platz gesetzt
+            BufferDB.Buffer[j].Buffer[1].loadedcurrentDay := BufferDB.currentDay;
+            BufferDB.Buffer[j].Buffer[1].loadedTime := BufferDB.currentTime;
+            addStatBuffered := TRUE;
+            load[j]:= FALSE;                // Ladeprozess beenden
+        ELSIF unload[j] AND NOT load[j] THEN
+            FOR i := 1 TO BufferSize[j] - 1 DO
+                IF BufferDB.Buffer[j].Buffer[i].loaded THEN
+                    // Ladeinformationen der Plätze nach unten verschieben
+                    BufferDB.Buffer[j].Buffer[i] := BufferDB.Buffer[j].Buffer[i+1];
+                END_IF;
+            END_FOR;
+            BufferDB.Buffer[j].Buffer[BufferSize[j]].loaded := FALSE;
+            unload[j] := FALSE;               // Entladeprozess beenden
+        END_IF;
+
+        // Berechnung der `loadedExpiredTime` für jeden Pufferplatz
+        FOR i := 1 TO BufferSize[j] DO
+            IF BufferDB.Buffer[j].Buffer[i].loaded THEN
+                currentDayDiff := BufferDB.currentDay - BufferDB.Buffer[j].Buffer[i].loadedcurrentDay; 
+                timeDiff := BufferDB.currentTime - BufferDB.Buffer[j].Buffer[i].loadedTime; 
+                BufferDB.Buffer[j].Buffer[i].loadedExpiredTime := TIME#86400000ms * currentDayDiff + timeDiff;
+            ELSE
+                IF BufferDB.Buffer[j].Buffer[i].loadedcurrentDay > 0 THEN
+                    BufferDB.Buffer[j].Buffer[i].loadedTime := TOD#0:0:0.000;
+                    BufferDB.Buffer[j].Buffer[i].loadedExpiredTime := T#0ms;
+                    BufferDB.Buffer[j].Buffer[i].loadedcurrentDay := 0;
+                END_IF;
+            END_IF;
+        END_FOR;
+
+        // Berechnen der Daten des ersten Blechs
+        amountCounter := 0;
+        firstLoadedTime:= TOD#0:0:0.000;
+        firstLoadedcurrentDay:= 0;
+        firstExpiredTime := T#0MS;
+        
+        FOR i := 1 TO BufferSize[j] DO
+            IF BufferDB.Buffer[j].Buffer[i].loaded THEN
+                amountCounter := amountCounter + 1;
+                firstLoadedTime := BufferDB.Buffer[j].Buffer[i].loadedTime;
+                firstLoadedcurrentDay := BufferDB.Buffer[j].Buffer[i].loadedcurrentDay;
+                firstExpiredTime := BufferDB.Buffer[j].Buffer[i].loadedExpiredTime;
+            END_IF;
+        END_FOR;
+        BufferDB.Buffer[j].amountLoaded := amountCounter;
+        BufferDB.Buffer[j].firstLoadedTime := firstLoadedTime;
+        BufferDB.Buffer[j].firstLoadedcurrentDay := firstLoadedcurrentDay;
+        BufferDB.Buffer[j].firstExpiredTime := firstExpiredTime;
+        
+        // Statistik
+        IF (BufferDB.Buffer[j].currentDayFlag <> BufferDB.currentDay) THEN
+            BufferDB.Buffer[j].StatBuffered[BufferDB.currentDay] := 0;
+            BufferDB.Buffer[j].StatMaxTime[BufferDB.currentDay] := T#0MS;
+            BufferDB.Buffer[j].StatAmount0[BufferDB.currentDay] := 0;
+        END_IF;
+        BufferDB.Buffer[j].currentDayFlag := BufferDB.currentDay;
+        
+        IF addStatBuffered THEN
+            BufferDB.Buffer[j].StatBuffered[BufferDB.currentDay] := BufferDB.Buffer[j].StatBuffered[BufferDB.currentDay] + 1;
+            addStatBuffered := FALSE;
+        END_IF;     
+
+        IF BufferDB.Buffer[j].firstExpiredTime > BufferDB.Buffer[j].StatMaxTime[BufferDB.currentDay] THEN
+            BufferDB.Buffer[j].StatMaxTime[BufferDB.currentDay] := BufferDB.Buffer[j].firstExpiredTime;
+        END_IF;
+
+        IF (BufferDB.Buffer[j].amountLoaded = 0) AND (BufferDB.Buffer[j].AmountFlag <> BufferDB.Buffer[j].amountLoaded) THEN
+            BufferDB.Buffer[j].StatAmount0[BufferDB.currentDay] := BufferDB.Buffer[j].StatAmount0[BufferDB.currentDay] + 1;
+        END_IF;
+        BufferDB.Buffer[j].AmountFlag := BufferDB.Buffer[j].amountLoaded;
+
+        BufferDB.Buffer[j].StatPorzLoaded := (BufferDB.Buffer[j].amountLoaded * 100) / BufferDB.Buffer[j].BufferSize;
+
+        IF BufferDB.Buffer[j].reset THEN
+            FOR i := 1 TO BufferSize[j] DO
+                BufferDB.Buffer[j].Buffer[i].loaded := FALSE;
+                BufferDB.Buffer[j].Buffer[i].loadedcurrentDay := BufferDB.currentDay;
+                BufferDB.Buffer[j].Buffer[i].loadedTime := BufferDB.currentTime;
+                BufferDB.Buffer[j].Buffer[i].loadedExpiredTime := T#0ms;
+            END_FOR;
+            BufferDB.Buffer[j].reset := FALSE;
+        END_IF;
+    END_FOR;
+END_FUNCTION
