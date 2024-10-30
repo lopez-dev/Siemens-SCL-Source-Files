@@ -93,7 +93,7 @@ VAR_TEMP
     BufferSize        : ARRAY[1..2] OF INT; // Maximale Größe des Puffers
     amountCounter     : INT;             // Zähler für Anzahl der geladenen Bleche
     firstLoadedTime   : TOD;             // Zeitpunkt des ersten geladenen Blechs
-    firstLoadedcurrentDay : INT;         // Tag der Beladung des ersten Blechs
+    firstLoadedcurrentDay    : INT;         // Tag der Beladung des ersten Blechs
     firstExpiredTime  : TIME;            // Verstrichene Zeit des ersten Blechs im Puffer
     addStatBuffered   : BOOL;            // Variable zur Erhöhung der StatBuffered um 1
 END_VAR
@@ -200,7 +200,7 @@ BEGIN
         IF BufferDB.Buffer[j].firstExpiredTime > BufferDB.Buffer[j].StatMaxTime[BufferDB.currentDay] THEN
             BufferDB.Buffer[j].StatMaxTime[BufferDB.currentDay] := BufferDB.Buffer[j].firstExpiredTime;
         END_IF;
- 
+        
         // 1. Berechnung der vollen Tage
         BufferDB.Buffer[j].firstExpiredTimeD := DINT_TO_INT(TIME_TO_DINT(BufferDB.Buffer[j].firstExpiredTime) / 86400000); // Tage
         // 2. Berechnung der vollen Stunden
@@ -209,8 +209,7 @@ BEGIN
         BufferDB.Buffer[j].firstExpiredTimeM := DINT_TO_INT(((TIME_TO_DINT(BufferDB.Buffer[j].firstExpiredTime) MOD 86400000) MOD 3600000) / 60000); // Minuten
         // 4. Berechnung der vollen Sekunden 
         BufferDB.Buffer[j].firstExpiredTimeS := DINT_TO_INT((((TIME_TO_DINT(BufferDB.Buffer[j].firstExpiredTime) MOD 86400000) MOD 3600000) MOD 60000) / 1000); // Sekunden
- 
- 
+
         // 1. Berechnung der vollen Tage
         BufferDB.Buffer[j].StatMaxTimeD[BufferDB.currentDay] := DINT_TO_INT(TIME_TO_DINT(BufferDB.Buffer[j].StatMaxTime[BufferDB.currentDay]) / 86400000); // Tage
         // 2. Berechnung der vollen Stunden
@@ -219,7 +218,7 @@ BEGIN
         BufferDB.Buffer[j].StatMaxTimeM[BufferDB.currentDay] := DINT_TO_INT(((TIME_TO_DINT(BufferDB.Buffer[j].StatMaxTime[BufferDB.currentDay]) MOD 86400000) MOD 3600000) / 60000); // Minuten
         // 4. Berechnung der vollen Sekunden 
         BufferDB.Buffer[j].StatMaxTimeS[BufferDB.currentDay] := DINT_TO_INT((((TIME_TO_DINT(BufferDB.Buffer[j].StatMaxTime[BufferDB.currentDay]) MOD 86400000) MOD 3600000) MOD 60000) / 1000); // Sekunden
-                 
+
         // StatAmount0
         IF (BufferDB.Buffer[j].amountLoaded = 0) AND (BufferDB.Buffer[j].AmountFlag <> BufferDB.Buffer[j].amountLoaded) THEN
             BufferDB.Buffer[j].StatAmount0[BufferDB.currentDay] := BufferDB.Buffer[j].StatAmount0[BufferDB.currentDay] + 1;
@@ -229,6 +228,7 @@ BEGIN
         // StatPorzLoaded
         BufferDB.Buffer[j].StatPorzLoaded := (BufferDB.Buffer[j].amountLoaded * 100) / BufferDB.Buffer[j].BufferSize;
 
+        // Reset
         IF BufferDB.Buffer[j].reset THEN
             FOR i := 1 TO BufferSize[j] DO
                 BufferDB.Buffer[j].Buffer[i].loaded := FALSE;
