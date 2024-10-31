@@ -1,0 +1,228 @@
+TYPE "udt_valveStruct"
+VERSION : 0.1
+STRUCT
+    state : Int;   //  Current state of the valve: 0 = closed, 1 = opening, 2 = open, 3 = closing
+    typeOfValve : Int;   //  Type of valve: 0 = single-solenoid (default), 1 = double-solenoid
+    open : Bool;   //  Input to open the valve (TRUE initiates opening)
+    close : Bool;   //  Input to close the valve (TRUE initiates closing)
+    fb_opened : Bool;   //  Feedback signal indicating the valve is fully open
+    fb_closed : Bool;   //  Feedback signal indicating the valve is fully closed
+    y_open : Bool;   //  Output to control the valve to open
+    y_close : Bool;   //  Output to control the valve to close
+    errorState : UInt;   //  Error state code: 0 = No error, 1 = Valve not opening, 2 = Valve not closing, 3 = Open and close input at the same time, 4 = Valve status unknown, 5 = Open and Close Feedback at the same time, 6 = Closed but fb_opened active, 7 = Opened but fb_closed active
+    errorText : String[60];   //  Text description of the current error state
+    openTime : Time := T#3S;   //  Timeout duration for opening the valve. T#0ms value =  off
+    closeTime : Time := T#3S;   //  Timeout duration for closing the valve. T#0ms value =  off
+    unknowTime : Time := T#3S;   //  Timeout duration for detecting unknown valve state. T#0ms value =  off
+    timerOpen {InstructionName := 'TON_TIME'; LibVersion := '1.0'; S7_SetPoint := 'False'} : TON_TIME;   //  Timer to monitor open valve operation
+    timerClose {InstructionName := 'TON_TIME'; LibVersion := '1.0'; S7_SetPoint := 'False'} : TON_TIME;   //  Timer to monitor close valve operation
+    timerUnknown {InstructionName := 'TON_TIME'; LibVersion := '1.0'; S7_SetPoint := 'False'} : TON_TIME;   //  Timer to monitor unknown valve state
+END_STRUCT;
+
+END_TYPE
+
+FUNCTION_BLOCK "fb_valveControl"
+
+
+TITLE = Valve Control
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+VAR_IN_OUT
+valve : "udt_valveStruct"; // Valve structure passed by reference
+END_VAR
+
+VAR CONSTANT
+STATE_CLOSED : Int := 0;     // State constant for valve closed
+STATE_OPENING : Int := 1;    // State constant for valve opening
+STATE_OPENED : Int := 2;     // State constant for valve fully open
+STATE_CLOSING : Int := 3;    // State constant for valve closing
+END_VAR
+
+
+BEGIN
+            REGION States legend
+                // State legend:
+                // STATE_CLOSED = 0 : Valve is closed
+                // STATE_OPENING = 1 : Valve is in the process of opening
+                // STATE_OPENED = 2 : Valve is fully open
+                // STATE_CLOSING = 3 : Valve is in the process of closing
+            END_REGION
+            
+            REGION typeOfValve
+                // Checks the type of valve and applies specific behavior based on the valve type
+                IF #valve.typeOfValve = 0 THEN
+                    // Single-solenoid valve logic: automatically close if open is not active
+                    #valve.close := NOT #valve.open;
+                ELSIF #valve.typeOfValve = 1 THEN
+                    // Double-solenoid valve logic (currently no specific behavior, placeholder for future expansion)
+                    ;
+                END_IF;
+            END_REGION
+            
+            
+            
+            REGION "Valve Control Logic"
+                // Controls the valve behavior based on its current state and input commands
+                CASE #valve.state OF
+                    #STATE_CLOSED:
+                        // If in 'closed' state, check if open command is received without close command
+                        IF #valve.open AND NOT #valve.close THEN
+                            #valve.state := #STATE_OPENING; // Change state to opening
+                        END_IF;
+                        // Start unknown state timer if both open and closed feedback signals are off
+                        #valve.timerUnknown(IN := NOT #valve.fb_opened AND NOT #valve.fb_closed,
+                                            PT := #valve.unknowTime);
+                    #STATE_OPENING:
+                        // If opening, check if fully open feedback is received
+                        IF #valve.fb_opened THEN
+                            #valve.state := #STATE_OPENED; // Change state to fully opened
+                        ELSIF #valve.close THEN
+                            #valve.state := #STATE_CLOSING; // Change state to closing if close command is active
+                        END_IF;
+                        // Start opening timer if valve has not yet fully opened
+                        #valve.timerOpen(IN := NOT #valve.fb_opened,
+                                        PT := #valve.unknowTime);
+                    #STATE_OPENED:
+                        // If fully opened, check if close command is received without open command
+                        IF #valve.close AND NOT #valve.open THEN
+                            #valve.state := #STATE_CLOSING; // Change state to closing
+                        END_IF;
+                        // Start unknown state timer if neither open nor closed feedback is active
+                        #valve.timerUnknown(IN := NOT #valve.fb_opened AND NOT #valve.fb_closed,
+                                            PT := #valve.unknowTime);
+                    #STATE_CLOSING:
+                        // If closing, check if fully closed feedback is received
+                        IF #valve.fb_closed THEN
+                            #valve.state := #STATE_CLOSED; // Change state to closed
+                        ELSIF #valve.open THEN
+                            #valve.state := #STATE_OPENING; // Change state to opening if open command is active
+                        END_IF;
+                        // Start closing timer if valve has not yet fully closed
+                        #valve.timerClose.TON(IN := NOT #valve.fb_closed,
+                                            PT := #valve.closeTime);
+                    ELSE
+                        #valve.state := #STATE_CLOSED; // Default state is closed
+                END_CASE;
+            END_REGION
+            
+            REGION Valve Outputs
+                // Control output signals based on the valve state
+                CASE #valve.state OF
+                    #STATE_CLOSED, #STATE_CLOSING:
+                        #valve.y_open := FALSE; // Close output active
+                        #valve.y_close := TRUE;
+                    #STATE_OPENED, #STATE_OPENING:
+                        #valve.y_open := TRUE; // Open output active
+                        #valve.y_close := FALSE;
+                END_CASE;
+            END_REGION
+            
+            REGION Error handling
+                // Detect and assign error states based on timers, input conflicts, and feedback signals
+                IF #valve.timerOpen.Q AND #valve.openTime <> T#0ms THEN
+                    #valve.errorState := 1; // Error: Valve not opening in allotted time
+                ELSIF #valve.timerClose.Q AND #valve.closeTime <> T#0ms THEN
+                    #valve.errorState := 2; // Error: Valve not closing in allotted time
+                ELSIF #valve.close AND #valve.open THEN
+                    #valve.errorState := 3; // Error: Open and close commands given simultaneously
+                ELSIF #valve.timerUnknown.Q AND #valve.unknowTime <> T#0ms THEN
+                    #valve.errorState := 4; // Error: Valve status unknown, no feedback active
+                ELSIF #valve.fb_closed AND #valve.fb_opened THEN
+                    #valve.errorState := 5; // Error: Both open and close feedback signals active
+                ELSIF #valve.state = #STATE_CLOSED AND #valve.fb_opened THEN
+                    #valve.errorState := 6; // Error: Valve is in 'closed' state, but open feedback active
+                ELSIF #valve.state = #STATE_OPENED AND #valve.fb_closed THEN
+                    #valve.errorState := 7; // Error: Valve is in 'opened' state, but close feedback active
+                ELSE
+                    #valve.errorState := 0; // No error detected
+                END_IF;
+            END_REGION
+            
+            REGION Error text
+                // Assigns descriptive error messages based on the error state
+                CASE #valve.errorState OF
+                    0:
+                        #valve.errorText := 'No error';
+                    1:
+                        #valve.errorText := 'Valve not opening';
+                    2:
+                        #valve.errorText := 'Valve not closing';
+                    3:
+                        #valve.errorText := 'Open and close input at the same time';
+                    4:
+                        #valve.errorText := 'Valve status unknown';
+                    5:
+                        #valve.errorText := 'Open and Close Feedback at the same time';
+                    6:
+                        #valve.errorText := 'Valve is in closed state, but open feedback is active';
+                    7:
+                        #valve.errorText := 'Valve is in opened state, but closed feedback is active';
+                    ELSE
+                        #valve.errorText := 'Unknown error';
+                END_CASE;
+            END_REGION
+            
+END_FUNCTION_BLOCK
+
+FUNCTION "fc_valveClose" : Void
+
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+VAR_INPUT
+
+END_VAR
+
+VAR_OUTPUT
+
+END_VAR
+
+VAR_IN_OUT
+valveData : "udt_valveStruct";
+END_VAR
+
+VAR_TEMP
+
+END_VAR
+
+VAR CONSTANT
+
+END_VAR
+
+
+BEGIN
+    IF #valveData.state <> 0 AND #valveData.state <> 3 THEN
+        #valveData.state := 3;
+    END_IF;
+END_FUNCTION
+
+FUNCTION "fc_valveOpen" : Void
+
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+VAR_INPUT
+
+END_VAR
+
+VAR_OUTPUT
+
+END_VAR
+
+VAR_IN_OUT
+valveData : "udt_valveStruct";
+END_VAR
+
+VAR_TEMP
+
+END_VAR
+
+VAR CONSTANT
+
+END_VAR
+
+
+BEGIN
+    IF #valveData.state <> 1 AND #valveData.state <> 2 THEN
+        #valveData.state := 1;
+    END_IF;
+END_FUNCTION
+

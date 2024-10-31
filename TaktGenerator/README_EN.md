@@ -186,7 +186,5 @@ This region assigns the `Pulse_Trigger` values (detected edges) to the output st
 
 ## Conclusion
 
-The **FB_Taktgenerator** provides an easy and flexible way to generate Takt
-
- signals and detect positive edges for multiple frequencies. By assigning UDT instances to the output variables, you can easily integrate these signals into your project.
+The **FB_Taktgenerator** provides an easy and flexible way to generate Takt signals and detect positive edges for multiple frequencies. By assigning UDT instances to the output variables, you can easily integrate these signals into your project.
 
