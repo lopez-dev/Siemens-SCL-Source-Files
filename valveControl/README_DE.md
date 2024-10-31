@@ -4,6 +4,8 @@
 
 Dieses Dokument beschreibt die Struktur und Funktionsweise der Ventilsteuerung in SCL. Die Implementierung umfasst die Struktur `udt_valveStruct` zur Definition der Ventildaten und den Funktionsbaustein `fb_valveControl` zur Steuerung der Ventilzustände. Zusätzliche Funktionen `fc_valveClose` und `fc_valveOpen` bieten einfache Mechanismen zur Initialisierung der Schließ- und Öffnungszustände des Ventils.
 
+- ✅ **Completed**: This project is fully developed and tested.
+
 ## Inhaltsverzeichnis
 
 1. [Struktur `udt_valveStruct`](#udt_valvestruct)

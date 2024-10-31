@@ -2,6 +2,8 @@
 
 This document describes the structure and functionality of the valve control logic in SCL. The implementation includes the `udt_valveStruct` structure for defining valve data and the `fb_valveControl` function block for managing valve states. Additional functions, `fc_valveClose` and `fc_valveOpen`, provide basic mechanisms for initializing the valve's closing and opening states.
 
+- ✅ **Completed**: This project is fully developed and tested.
+
 ## Table of Contents
 
 1. [Structure `udt_valveStruct`](#udt_valvestruct)
