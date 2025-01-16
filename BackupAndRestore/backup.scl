@@ -1,0 +1,133 @@
+TYPE "backupMainHeaderUDT"
+VERSION : 0.1
+   STRUCT
+      save : Bool;          // Startet den Backup-Prozess, wenn TRUE.
+      restore : Bool;       // Startet den Restore-Prozess, wenn TRUE.
+      wr_counter : Int;     // Zähler für die Anzahl der abgeschlossenen Schreiboperationen.
+      rd_counter : Int;     // Zähler für die Anzahl der abgeschlossenen Leseoperationen.
+      last_BLK : Int;       // Gibt die Nummer des letzten Blocks an, der bearbeitet werden soll.
+   END_STRUCT;
+END_TYPE
+
+TYPE "backupBLKHeaderUDT"
+VERSION : 0.1
+   STRUCT
+      save : Bool;          // Gibt an, ob der aktuelle Block gespeichert werden soll.
+      restore : Bool;       // Gibt an, ob der aktuelle Block wiederhergestellt werden soll.
+      write : Bool;         // Startet den Schreibvorgang, wenn TRUE.
+      wr_busy : Bool;       // Zeigt an, ob der Schreibvorgang gerade läuft.
+      wr_process : Bool;    // Zeigt an, dass der Schreibprozess aktiv ist.
+      wr_done : Bool;       // Zeigt an, dass der Schreibvorgang abgeschlossen ist.
+      wr_ret : Int;         // Rückgabewert der Schreiboperation, z. B. Fehlercodes.
+      wr_ret_mem : Int;     // Zwischenspeicherung des letzten Rückgabewerts.
+      read : Bool;          // Startet den Lesevorgang, wenn TRUE.
+      rd_busy : Bool;       // Zeigt an, ob der Lesevorgang gerade läuft.
+      rd_process : Bool;    // Zeigt an, dass der Leseprozess aktiv ist.
+      rd_done : Bool;       // Zeigt an, dass der Lesevorgang abgeschlossen ist.
+      rd_ret : Int;         // Rückgabewert der Leseoperation, z. B. Fehlercodes.
+      rd_ret_mem : Int;     // Zwischenspeicherung des letzten Rückgabewerts.
+   END_STRUCT;
+END_TYPE
+
+FUNCTION_BLOCK "Backup"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+VAR_INPUT 
+   Nr : Int;                // Identifiziert den aktuellen Block, der bearbeitet wird.
+   timestamp : LDT;         // Zeitstempel für die Sicherungs- oder Wiederherstellungsaktion.
+END_VAR
+VAR_IN_OUT 
+   main_header : "backupMainHeaderUDT"; // Enthält die Hauptsteuerparameter für den Prozess.
+   BLK_header : "backupBLKHeaderUDT";   // Enthält die Steuerparameter für den aktuellen Block.
+   DB_BLK : Variant;                    // Referenz auf den zu sichernden oder wiederherzustellenden Datenblock.
+END_VAR
+VAR 
+   Backup_Return {InstructionName := 'Program_Alarm'; LibVersion := '1.0'} : Program_Alarm; // Meldet den Status des Backup-Prozesses.
+   Restore_Return {InstructionName := 'Program_Alarm'; LibVersion := '1.0'} : Program_Alarm; // Meldet den Status des Restore-Prozesses.
+END_VAR
+VAR_TEMP 
+   SD1_wr : UInt;           // Temporäre Variable für den Rückgabestatus des Schreibvorgangs.
+   SD1_rd : UInt;           // Temporäre Variable für den Rückgabestatus des Lesevorgangs.
+   wr : UInt;               // Temporärer Parameter für Schreiboperationen.
+   rd : UInt;               // Temporärer Parameter für Leseoperationen.
+END_VAR
+BEGIN
+REGION backup
+   #rd := INT_TO_UINT(#Nr); // Konvertiert die Blocknummer in einen unsigned Integer.
+   IF #main_header.save AND #main_header.wr_counter = #Nr AND NOT #BLK_header.save THEN
+      #BLK_header.save := TRUE; // Aktiviert das Speichern für den aktuellen Block, wenn die Bedingungen erfüllt sind.
+   END_IF;
+   IF #BLK_header.restore THEN
+      #BLK_header.save := FALSE; // Stoppt den Backup-Prozess, wenn ein Restore-Prozess aktiv ist.
+   END_IF;
+   IF #main_header.wr_counter = 0 THEN
+      #main_header.wr_counter := 1; // Initialisiert den Schreibzähler, falls er noch nicht gesetzt ist.
+   END_IF;
+   IF #BLK_header.save AND NOT #BLK_header.wr_process THEN
+      #BLK_header.wr_process := TRUE; // Startet den Schreibprozess.
+      #BLK_header.write := TRUE;      // Setzt das Schreibsignal.
+   END_IF;
+   IF #BLK_header.save THEN
+      #BLK_header.wr_ret := WRIT_DBL(
+         REQ := #BLK_header.write, 
+         SRCBLK := #DB_BLK, 
+         BUSY => #BLK_header.wr_busy, 
+         DSTBLK => #DB_BLK);
+   END_IF;
+   IF #BLK_header.wr_busy THEN
+      #BLK_header.write := FALSE; // Deaktiviert das Schreibsignal, wenn der Prozess läuft.
+      #BLK_header.wr_ret_mem := #BLK_header.wr_ret; // Speichert den Rückgabewert.
+   END_IF;
+   IF #BLK_header.wr_process AND ((#BLK_header.wr_ret = 0) OR (#BLK_header.wr_ret = 28672)) THEN
+      #main_header.wr_counter := #main_header.wr_counter + 1; // Erhöht den Schreibzähler.
+      #BLK_header.wr_process := FALSE; // Markiert den Schreibprozess als abgeschlossen.
+      #BLK_header.save := FALSE; // Deaktiviert den Speichervorgang.
+      #BLK_header.wr_done := TRUE; // Markiert den Schreibvorgang als fertig.
+   END_IF;
+   #SD1_wr := INT_TO_UINT(#BLK_header.wr_ret); // Konvertiert den Rückgabewert für die Alarmausgabe.
+   #wr := 1; // Setzt den Alarmcode für Backup.
+   #Backup_Return(SIG := #BLK_header.wr_done AND NOT (#BLK_header.wr_ret = 28673) AND NOT (#BLK_header.wr_ret = 28674), TIMESTAMP := #timestamp, SD_1 := #SD1_wr, SD_2 := #wr);
+   #BLK_header.wr_done := FALSE; // Setzt das "wr_done"-Flag zurück.
+   IF #main_header.wr_counter = #main_header.last_BLK + 1 THEN
+      #main_header.wr_counter := 0; // Setzt den Schreibzähler zurück, wenn alle Blöcke verarbeitet sind.
+      #main_header.save := FALSE; // Beendet den Backup-Prozess.
+   END_IF;
+END_REGION
+REGION restore
+   IF #main_header.rd_counter = 0 THEN
+      #main_header.rd_counter := 1; // Initialisiert den Restore-Zähler.
+   END_IF;
+   IF #main_header.restore AND #main_header.rd_counter = #Nr AND NOT #BLK_header.restore THEN
+      #BLK_header.restore := TRUE; // Aktiviert den Restore-Prozess für den aktuellen Block.
+   END_IF;
+   IF #BLK_header.restore AND NOT #BLK_header.rd_process THEN
+      #BLK_header.rd_process := TRUE; // Startet den Leseprozess.
+      #BLK_header.read := TRUE; // Setzt das Lesesignal.
+   END_IF;
+   IF #BLK_header.restore THEN
+      #BLK_header.rd_ret := READ_DBL(
+         REQ := #BLK_header.read, 
+         SRCBLK := #DB_BLK, 
+         BUSY => #BLK_header.rd_busy, 
+         DSTBLK => #DB_BLK);
+   END_IF;
+   IF #BLK_header.rd_busy THEN
+      #BLK_header.read := FALSE; // Deaktiviert das Lesesignal, wenn der Prozess läuft.
+      #BLK_header.rd_ret_mem := #BLK_header.rd_ret; // Speichert den Rückgabewert.
+   END_IF;
+   IF #BLK_header.rd_process AND ((#BLK_header.rd_ret = 0) OR (#BLK_header.rd_ret = 28672)) THEN
+      #main_header.rd_counter := #main_header.rd_counter + 1; // Erhöht den Restore-Zähler.
+      #BLK_header.rd_process := FALSE; // Markiert den Leseprozess als abgeschlossen.
+      #BLK_header.restore := FALSE; // Deaktiviert den Restore-Prozess.
+      #BLK_header.rd_done := TRUE; // Markiert den Lesevorgang als fertig.
+   END_IF;
+   #SD1_rd := INT_TO_UINT(#BLK_header.rd_ret); // Konvertiert den Rückgabewert für die Alarmausgabe.
+   #rd := 2; // Setzt den Alarmcode für Restore.
+   #Restore_Return(SIG := #BLK_header.rd_done AND NOT (#BLK_header.rd_ret = 28673) AND NOT (#BLK_header.rd_ret = 28674), TIMESTAMP := #timestamp, SD_1 := #SD1_rd, SD_2 := #rd);
+   #BLK_header.rd_done := FALSE; // Setzt das "rd_done"-Flag zurück.
+   IF #main_header.rd_counter = #main_header.last_BLK + 1 THEN
+      #main_header.rd_counter := 1; // Setzt den Restore-Zähler zurück.
+      #main_header.restore := FALSE; // Beendet den Restore-Prozess.
+   END_IF;
+END_REGION
+END_FUNCTION_BLOCK

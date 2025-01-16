@@ -1,0 +1,105 @@
+TYPE "importDataUDT"
+VERSION : 0.1
+   STRUCT
+      req : Bool;
+      done : Bool;
+      busy : Bool;
+      error : Bool;
+      status : Word;
+      lastErrorStatus : Word;
+   END_STRUCT;
+
+END_TYPE
+
+TYPE "exportDataUDT"
+VERSION : 0.1
+   STRUCT
+      req : Bool;
+      done : Bool;
+      busy : Bool;
+      error : Bool;
+      status : Word;
+      lastErrorStatus : Word;
+   END_STRUCT;
+
+END_TYPE
+
+FUNCTION_BLOCK "rezept_ex-import"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_IN_OUT 
+      exportDataUDT : "exportDataUDT";
+      importDataUDT : "importDataUDT";
+      "DB" : Variant;
+   END_VAR
+
+   VAR 
+      RecipeExport_Instance {InstructionName := 'RecipeExport'; LibVersion := '1.2'} : RecipeExport;
+      RecipeImport_Instance {InstructionName := 'RecipeImport'; LibVersion := '1.2'} : RecipeImport;
+      Export_Data {InstructionName := 'Program_Alarm'; LibVersion := '1.0'} : Program_Alarm;
+      Import_Data {InstructionName := 'Program_Alarm'; LibVersion := '1.0'} : Program_Alarm;
+   END_VAR
+
+   VAR_TEMP 
+      importTextByte : Byte;
+      exportTextByte : Byte;
+   END_VAR
+
+
+BEGIN
+	REGION Export
+	    // Die Instanz des Rezept-Exports wird aufgerufen, wenn die Anforderung (REQ) aktiv ist und der Export noch nicht läuft (NOT busy)
+	    // Es werden die entsprechenden Ausgänge (DONE, BUSY, ERROR, STATUS) und der Rezept-Datenbaustein (RECIPE_DB) übergeben
+	    #RecipeExport_Instance(REQ := #exportDataUDT.req AND NOT #exportDataUDT.busy,
+	                           DONE => #exportDataUDT.done,
+	                           BUSY => #exportDataUDT.busy,
+	                           ERROR => #exportDataUDT.error,
+	                           STATUS => #exportDataUDT.status,
+	                           RECIPE_DB := #DB);
+	    
+	    // Die Anforderung (req) für den Export wird nach der Instanziierung auf FALSE gesetzt, um eine erneute Anforderung zu verhindern
+	    #exportDataUDT.req := FALSE;
+	    
+	    // Wenn ein Fehler auftritt oder der Export abgeschlossen ist (done), wird der letzte Fehlerstatus gespeichert
+	    IF #exportDataUDT.error OR #exportDataUDT.done THEN
+	        #exportDataUDT.lastErrorStatus := #exportDataUDT.status;
+	    END_IF;
+	    
+	    // Der Status des Exports wird von WORD in BYTE umgewandelt und gespeichert
+	    #exportTextByte := WORD_TO_BYTE(IN := #exportDataUDT.status);
+	    
+	    // Der Zustand des Exportprozesses wird aktualisiert und basierend auf Fehler oder Abschluss (SIG) und dem Statusbyte (SD_1) weiterverarbeitet
+	    #Export_Data(SIG := #exportDataUDT.error OR #exportDataUDT.done,
+	                 SD_1 := #exportDataUDT.status);
+	    
+	END_REGION
+	
+	REGION Import
+	    // Die Instanz des Rezept-Imports wird aufgerufen, wenn die Anforderung (REQ) aktiv ist und der Import noch nicht läuft (NOT busy)
+	    // Es werden die entsprechenden Ausgänge (DONE, BUSY, ERROR, STATUS) und der Rezept-Datenbaustein (RECIPE_DB) übergeben
+	    #RecipeImport_Instance(REQ := #importDataUDT.req AND NOT #exportDataUDT.busy,
+	                           DONE => #importDataUDT.done,
+	                           BUSY => #importDataUDT.busy,
+	                           ERROR => #importDataUDT.error,
+	                           STATUS => #importDataUDT.status,
+	                           RECIPE_DB := #DB);
+	    
+	    // Die Anforderung (req) für den Import wird nach der Instanziierung auf FALSE gesetzt, um eine erneute Anforderung zu verhindern
+	    #importDataUDT.req := FALSE;
+	    
+	    // Wenn ein Fehler auftritt oder der Import abgeschlossen ist (done), wird der letzte Fehlerstatus gespeichert
+	    IF #importDataUDT.error OR #importDataUDT.done THEN
+	        #importDataUDT.lastErrorStatus := #importDataUDT.status;
+	    END_IF;
+	    
+	    // Der Status des Imports wird von WORD in BYTE umgewandelt und gespeichert
+	    #importTextByte := WORD_TO_BYTE(IN := #importDataUDT.status);
+	    
+	    // Der Zustand des Importprozesses wird aktualisiert und basierend auf Fehler oder Abschluss (SIG) und dem Statusbyte (SD_1) weiterverarbeitet
+	    #Import_Data(SIG := #importDataUDT.error OR #importDataUDT.done,
+	                 SD_1 := #importDataUDT.status);
+	    
+	END_REGION
+	
+END_FUNCTION_BLOCK
+
