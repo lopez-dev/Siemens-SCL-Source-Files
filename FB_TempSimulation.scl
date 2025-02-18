@@ -1,0 +1,80 @@
+FUNCTION_BLOCK "FB_TempSimulation"
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      Heizleistung : Real;   // 0.0 ... 100.0  %
+      ZeitkonstHeizen : Real := 8000.0;   // Zeitkonstante Heizen
+      ZeitkonstKühlen : Real := 15000.0;   // Zeitkonstante Kühlen
+      MaxTemp : Int := 3000;   // x10, z.B. 3000 für 300.0°C
+      UmgebungTemp : Int := 150;   // x10, z.B. 150 für 15.0°C
+   END_VAR
+
+   VAR_OUTPUT 
+      Temperatur : Int;   // x10, z.B. 3000 für 300.0°C
+   END_VAR
+
+   VAR_IN_OUT 
+      Temp_Aktuell : Real;   // x10 (z.B. 105.0 => 10.5°C) (Nur für Intenre Berechnugnen)
+   END_VAR
+
+   VAR 
+      Temp_Soll : Real;   // x10
+      Alpha : Real;   // Anteil pro Zyklus
+      Delta : Real;
+   END_VAR
+
+   VAR CONSTANT 
+      CYCLE_TIME : Real := 0.1;
+   END_VAR
+
+
+BEGIN
+	// 1) Zieltemperatur aus Heizleistung: zwischen Umgebung und Max
+	//    (im x10-Format)
+	#Temp_Soll := INT_TO_REAL(#UmgebungTemp)
+	+ ((INT_TO_REAL(#MaxTemp) - INT_TO_REAL(#UmgebungTemp))
+	* (#Heizleistung / 100.0));
+	
+	// 2) Entscheidung: heizen oder kühlen?
+	IF #Temp_Soll > #Temp_Aktuell THEN
+	    // ----------------------------
+	    // Heizen
+	    // ----------------------------
+	    // -> zeitbasierte Annäherung: Δ = (Temp_Soll - Temp_Aktuell) * (CYCLE_TIME / ZeitkonstHeizen)
+	    
+	    // Vorsicht bei Division durch 0:
+	    IF #ZeitkonstHeizen > 0 THEN
+	        #Alpha := #CYCLE_TIME / #ZeitkonstHeizen;
+	    ELSE
+	        #Alpha := 1.0; // Falls ZeitkonstHeizen = 0 -> Sofort Sprung
+	    END_IF;
+	    
+	    #Delta := (#Temp_Soll - #Temp_Aktuell) * #Alpha;
+	    #Temp_Aktuell := #Temp_Aktuell + #Delta;
+	    
+	ELSIF #Temp_Soll < #Temp_Aktuell THEN
+	    // ----------------------------
+	    // Kühlen
+	    // ----------------------------
+	    IF #ZeitkonstKühlen > 0 THEN
+	        #Alpha := #CYCLE_TIME / #ZeitkonstKühlen;
+	    ELSE
+	        #Alpha := 1.0;
+	    END_IF;
+	    
+	    #Delta := (#Temp_Aktuell - #Temp_Soll) * #Alpha;
+	    #Temp_Aktuell := #Temp_Aktuell - #Delta;
+	END_IF;
+	
+	// 3) Begrenzung auf Umgebung bzw. Max
+	IF #Temp_Aktuell < INT_TO_REAL(#UmgebungTemp) THEN
+	    #Temp_Aktuell := INT_TO_REAL(#UmgebungTemp);
+	END_IF;
+	IF #Temp_Aktuell > INT_TO_REAL(#MaxTemp) THEN
+	    #Temp_Aktuell := INT_TO_REAL(#MaxTemp);
+	END_IF;
+	
+	// 4) Ausgabe
+	#Temperatur := REAL_TO_INT(#Temp_Aktuell);
+END_FUNCTION_BLOCK
+
