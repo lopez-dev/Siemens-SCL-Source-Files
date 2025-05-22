@@ -1,0 +1,89 @@
+FUNCTION "FC_ID_CHECK" : Void
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      ID_T1 : UInt;
+      ID_T2 : UInt;
+      ID_T3 : UInt;
+      ID_T4 : UInt;
+      ID_T5 : UInt;
+      ID_V : UInt;
+      "T->V" : Bool;
+      "V->T" : Bool;
+      "T<->T" : Bool;
+   END_VAR
+
+   VAR_IN_OUT 
+      ID_Quelle : UInt;
+      ID_Ziel : UInt;
+   END_VAR
+
+   VAR_TEMP 
+      T : Array[1..5] of UInt;
+      i : Int;
+      i2 : Int;
+      ZielImSpiel : Bool;
+   END_VAR
+
+   VAR CONSTANT 
+      ArraySize : UInt := 5;
+   END_VAR
+
+
+BEGIN
+	REGION Parameter
+	    #"T->V" := true;   // Pumpen von  Tank zu Verladung möglich
+	    #"V->T" := true;    // Pumpen von  Verladung zu Tank möglich
+	    #"T<->T" := true;   // Pumpen zwischen Tanks möglich
+	END_REGION 
+	
+	REGION IDS zuweisen 
+	    #T[1] := #ID_T1;
+	    #T[2] := #ID_T2;
+	    #T[3] := #ID_T3;
+	    #T[4] := #ID_T4;
+	    #T[5] := #ID_T5;
+	END_REGION 
+	
+	
+	
+	
+	// Initialisierung
+	#ZielImSpiel := FALSE;
+	
+	// Überprüfen, ob die Ziel ID im Spiel ist
+	FOR #i := 1 TO 5 DO
+	    IF #ID_Ziel = #T[#i] OR #ID_Ziel = #ID_V THEN
+	        #ZielImSpiel := TRUE;
+	        EXIT;
+	    END_IF;
+	END_FOR;
+	
+	// Wenn die Ziel ID im Spiel ist, Parameter prüfen und Quelle korrigieren
+	
+	IF #ZielImSpiel THEN
+	    IF NOT #"T->V" AND (#ID_Ziel = #ID_V) THEN
+	        #ID_Ziel := 0; // Ziel korrigieren
+	    ELSE
+	        
+	    END_IF;
+	    IF #"V->T" AND (#ID_Ziel = #T[1] OR
+	        #ID_Ziel = #T[2] OR #ID_Ziel = #T[3] OR
+	        #ID_Ziel = #T[4] OR #ID_Ziel = #T[5]) AND #ID_Quelle <> #ID_V THEN
+	        #ID_Quelle := 0; // Quelle korrigieren
+	    END_IF;
+	    IF #"T<->T" AND(#ID_Ziel = #T[1] OR
+	        #ID_Ziel = #T[2] OR #ID_Ziel = #T[3] OR
+	        #ID_Ziel = #T[4] OR #ID_Ziel = #T[5]) AND NOT (#ID_Quelle = #T[1] OR
+	        #ID_Quelle = #T[2] OR #ID_Quelle = #T[3] OR
+	        #ID_Quelle = #T[4] OR #ID_Quelle = #T[5]) THEN
+	        #ID_Quelle := 0; // Quelle korrigieren  
+	    END_IF;
+	END_IF;
+	
+	
+	
+	
+	
+END_FUNCTION
+
