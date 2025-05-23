@@ -1,119 +1,131 @@
+FUNCTION "FC_IsTankID" : Bool
+{ S7_Optimized_Access := 'TRUE' }
+VERSION : 0.1
+   VAR_INPUT 
+      id : UInt;
+   END_VAR
+
+   VAR_IN_OUT 
+      T : Array[1.."FC_ID_CHECK_ARRAY"] of UInt;   // Zwischenspeicher für Tank-IDs
+   END_VAR
+
+   VAR_TEMP 
+      idx : Int;
+   END_VAR
+
+
+BEGIN
+	
+	FOR #idx := 1 TO "FC_ID_CHECK_ARRAY" DO
+	    IF #id = #T[#idx] THEN
+	        #FC_IsTankID := TRUE;
+	    END_IF;
+	END_FOR;
+	
+	#FC_IsTankID := FALSE;
+END_FUNCTION
+
 FUNCTION "FC_ID_CHECK" : Void
 { S7_Optimized_Access := 'TRUE' }
 VERSION : 0.1
    VAR_INPUT 
-      ID_T1 : UInt;      // Tank 1 ID
-      ID_T2 : UInt;      // Tank 2 ID
-      ID_T3 : UInt;      // Tank 3 ID
-      ID_T4 : UInt;      // Tank 4 ID
-      ID_T5 : UInt;      // Tank 5 ID
-      ID_V : UInt;       // Verladung ID
-      "T->V" : Bool;     // Erlaubt das Pumpen von Tank zu Verladung
-      "V->T" : Bool;     // Erlaubt das Pumpen von Verladung zu Tank
-      "T<->T" : Bool;    // Erlaubt das Pumpen zwischen Tanks
+      ID_T1 : UInt;   // Tank 1 ID
+      ID_T2 : UInt;   // Tank 2 ID
+      ID_T3 : UInt;   // Tank 3 ID
+      ID_T4 : UInt;   // Tank 4 ID
+      ID_T5 : UInt;   // Tank 5 ID
+      ID_T6 : UInt;   // Tank 6 ID
+      ID_T7 : UInt;   // Tank 7 ID
+      ID_T8 : UInt;   // Tank 8 ID
+      ID_V : UInt;   // Verladung ID
+      "T->V" : Bool;   // Erlaubt das Pumpen von Tank zu Verladung
+      "V->T" : Bool;   // Erlaubt das Pumpen von Verladung zu Tank
+      "T<->T" : Bool;   // Erlaubt das Pumpen zwischen Tanks
    END_VAR
 
    VAR_IN_OUT 
-      ID_Quelle : UInt;  // Quell-ID (Tank oder Verladung)
-      ID_Ziel : UInt;    // Ziel-ID (Tank oder Verladung)
+      ID_Quelle : UInt;   // Quell-ID (Tank oder Verladung)
+      ID_Ziel : UInt;   // Ziel-ID (Tank oder Verladung)
    END_VAR
 
    VAR_TEMP 
-      T : Array[1..5] of UInt; // Zwischenspeicher für Tank-IDs
-      i : Int;                 // Schleifenvariable
-      ZielImSpiel : Bool;      // Gibt an, ob das Ziel gültig ist
-      QuelleImSpiel : Bool;    // Gibt an, ob die Quelle im Spiel ist
+      T : Array[1.."FC_ID_CHECK_ARRAY"] of UInt;   // Zwischenspeicher für Tank-IDs
+      i : Int;   // Schleifenvariable
+      ZielImSpiel : Bool;   // Gibt an, ob das Ziel gültig ist
+      QuelleImSpiel : Bool;   // Gibt an, ob die Quelle im Spiel ist
    END_VAR
 
-   VAR CONSTANT 
-      ArraySize : UInt := 5;   // Größe des Tank-Arrays
-   END_VAR
-
-   // Hilfsfunktion: Prüft, ob eine ID in den Tanks enthalten ist
-   FUNCTION IsTankID(id: UInt) : Bool
-   VAR
-      idx: Int;
-   END_VAR
-   BEGIN
-      FOR idx := 1 TO ArraySize DO
-         IF id = T[idx] THEN
-            RETURN TRUE;
-         END_IF;
-      END_FOR;
-      RETURN FALSE;
-   END_FUNCTION
 
 BEGIN
-    REGION Parameter
-        // Standardmäßig alle Pumpmöglichkeiten erlauben
-        #"T->V" := true;
-        #"V->T" := true;
-        #"T<->T" := true;
-    END_REGION 
-
-    REGION IDS zuweisen 
-        // Tank-IDs in Array speichern
-        #T[1] := #ID_T1;
-        #T[2] := #ID_T2;
-        #T[3] := #ID_T3;
-        #T[4] := #ID_T4;
-        #T[5] := #ID_T5;
-    END_REGION 
-
-    // Initialisierung
-    #ZielImSpiel := FALSE;
-    #QuelleImSpiel := FALSE;
-
-    // Überprüfen, ob die Ziel ID im Spiel ist (Tank oder Verladung)
-    // Tank
-    FOR #i := 1 TO ArraySize DO
-        IF #ID_Ziel = #T[#i] THEN
-            #ZielImSpiel := TRUE;
-        END_IF;
-        IF #ID_Quelle = #T[#i] THEN
-            #QuelleImSpiel := TRUE;
-        END_IF;
-    END_FOR;
-    // Verladung
-    IF #ID_Ziel = #ID_V THEN
-        #ZielImSpiel := TRUE;
-    END_IF;
-    IF #ID_Quelle = #ID_V THEN
-        #QuelleImSpiel := TRUE;
-    END_IF;
-
-    // Wenn die Quelle nicht im Spiel ist, Quelle auf 0 setzen
-    IF NOT #QuelleImSpiel THEN
-        #ID_Quelle := 0;
-    END_IF;
-
-    // Wenn die Ziel ID gültig ist, weitere Prüfungen durchführen
-    IF #ZielImSpiel THEN
-        // Tank zu Tank
-        IF IsTankID(#ID_Quelle) AND IsTankID(#ID_Ziel) THEN
-            IF NOT #"T<->T" THEN
-                #ID_Quelle := 0;
-            END_IF;
-        // Tank zu Verladung
-        ELSIF IsTankID(#ID_Quelle) AND (#ID_Ziel = #ID_V) THEN
-            IF NOT #"T->V" THEN
-                #ID_Ziel := 0;
-            END_IF;
-        // Verladung zu Tank
-        ELSIF (#ID_Quelle = #ID_V) AND IsTankID(#ID_Ziel) THEN
-            IF NOT #"V->T" THEN
-                #ID_Quelle := 0;
-            END_IF;
-        // Verladung zu Verladung (nicht erlaubt)
-        ELSIF (#ID_Quelle = #ID_V) AND (#ID_Ziel = #ID_V) THEN
-            #ID_Quelle := 0;
-        // Ungültige Kombination (z.B. Quelle/Ziel nicht im Spiel)
-        ELSE
-            #ID_Quelle := 0;
-        END_IF;
-    ELSE
-        // Ziel nicht im Spiel
-        #ID_Ziel := 0;
-    END_IF;
+	    REGION IDS zuweisen 
+	        // Tank-IDs in Array speichern
+	        #T[1] := #ID_T1;
+	        #T[2] := #ID_T2;
+	        #T[3] := #ID_T3;
+	        #T[4] := #ID_T4;
+	        #T[5] := #ID_T5;
+	        #T[6] := #ID_T6;
+	        #T[7] := #ID_T7;
+	        #T[8] := #ID_T8;
+	    END_REGION
+	    
+	    // Initialisierung
+	    #ZielImSpiel := FALSE;
+	    #QuelleImSpiel := FALSE;
+	    
+	    // Überprüfen, ob die Ziel ID im Spiel ist (Tank oder Verladung)
+	    // Tank
+	    FOR #i := 1 TO "FC_ID_CHECK_ARRAY" DO
+	        IF #ID_Ziel = #T[#i] THEN
+	            #ZielImSpiel := TRUE;
+	        END_IF;
+	        IF #ID_Quelle = #T[#i] THEN
+	            #QuelleImSpiel := TRUE;
+	        END_IF;
+	    END_FOR;
+	    // Verladung
+	    IF #ID_Ziel = #ID_V THEN
+	        #ZielImSpiel := TRUE;
+	    END_IF;
+	    IF #ID_Quelle = #ID_V THEN
+	        #QuelleImSpiel := TRUE;
+	    END_IF;
+	    
+	    // Wenn die Quelle nicht im Spiel ist, Quelle auf 0 setzen
+	    IF NOT #QuelleImSpiel THEN
+	        #ID_Quelle := 0;
+	    END_IF;
+	    
+	    // Wenn die Ziel ID gültig ist, weitere Prüfungen durchführen
+	    IF #ZielImSpiel THEN
+	        // Tank zu Tank
+	        IF "FC_IsTankID"(id := #ID_Quelle, T := #T) AND "FC_IsTankID"(id := #ID_Ziel, T := #T) THEN
+	            IF NOT #"T<->T" THEN
+	                #ID_Quelle := 0;
+	            END_IF;
+	        // Tank zu Verladung
+	        ELSIF "FC_IsTankID"(id := #ID_Quelle, T := #T) AND (#ID_Ziel = #ID_V) THEN
+	            IF NOT #"T->V" THEN
+	                #ID_Ziel := 0;
+	            END_IF;
+	        // Verladung zu Tank
+	        ELSIF (#ID_Quelle = #ID_V) AND "FC_IsTankID"(id := #ID_Ziel, T := #T) THEN
+	            IF NOT #"V->T" THEN
+	                #ID_Quelle := 0;
+	            END_IF;
+	        // Verladung zu Verladung (nicht erlaubt)
+	        ELSIF (#ID_Quelle = #ID_V) AND (#ID_Ziel = #ID_V) THEN
+	            #ID_Quelle := 0;
+	        // Tank als Ziel nicht erlaubt
+	        ELSIF NOT #"T<->T" AND NOT #"V->T" THEN
+	            IF #ID_Ziel = #ID_V THEN
+	                #ID_Ziel := 0;
+	            END_IF;
+	            
+	        END_IF;
+	    ELSE
+	        // Ziel nicht im Spiel
+	        #ID_Ziel := 0;
+	    END_IF;
 END_FUNCTION
 
